@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   BookOpen, Users, Calendar as CalendarIcon, CheckSquare, 
   Settings, LogOut, FileCheck, Bell, Activity,
-  FileSpreadsheet, ChevronLeft, ChevronRight, Clock, User, Shield
+  FileSpreadsheet, ChevronLeft, ChevronRight, Clock, User, Shield,
+  Briefcase, CalendarDays
 } from 'lucide-react';
 
 import LoginView from './pages/Login';
@@ -15,6 +16,11 @@ import Grades from './pages/Grades';
 import UserManagement from './pages/User_Management';
 import SystemSettings from './pages/System_Settings';
 import GradeApprovals from './pages/Grade_Approvals';
+
+// --- NEW PAGES (added by classmate) ---
+import DeanWorkload from './pages/Dean_Workload';
+import FacultyWorkload from './pages/Faculty_Workload';
+import RegistrarScheduling from './pages/Registrar_Scheduling';
 
 // ============================================================
 //  API BASE URL — points to your Express backend
@@ -184,9 +190,24 @@ export default function App() {
             <GradeApprovals user={currentUser} />
           )}
 
+          {/* NEW: Admin + SuperAdmin — Course Scheduling */}
+          {currentView === 'scheduling' && (isAdmin || isSuperAdmin) && (
+            <RegistrarScheduling user={currentUser} />
+          )}
+
+          {/* NEW: Admin + SuperAdmin — Workload Management */}
+          {currentView === 'workload' && (isAdmin || isSuperAdmin) && (
+            <DeanWorkload user={currentUser} />
+          )}
+
           {/* Faculty only */}
           {currentView === 'grades' && isFaculty && (
             <Grades user={currentUser} />
+          )}
+
+          {/* NEW: Faculty only — My Workload */}
+          {currentView === 'my_workload' && isFaculty && (
+            <FacultyWorkload user={currentUser} />
           )}
 
           {/* Shared: everyone */}
@@ -226,29 +247,34 @@ export default function App() {
 // ============================================================
 function Sidebar({ role, isAdmin, isSuperAdmin, currentView, setCurrentView }) {
   const facultyLinks = [
-    { id: 'dashboard',  label: 'Dashboard',            icon: Activity },
-    { id: 'grades',     label: 'Grade Encoding',        icon: FileSpreadsheet },
-    { id: 'tasks',      label: 'Tasks & Schedule',      icon: CalendarIcon },
-    { id: 'repository', label: 'Department Repository', icon: BookOpen },
-    { id: 'profile',    label: 'My Profile',            icon: User },
+    { id: 'dashboard',   label: 'Dashboard',            icon: Activity },
+    { id: 'grades',      label: 'Grade Encoding',        icon: FileSpreadsheet },
+    { id: 'my_workload', label: 'My Workload',           icon: Briefcase },
+    { id: 'tasks',       label: 'Tasks & Schedule',      icon: CalendarIcon },
+    { id: 'repository',  label: 'Department Repository', icon: BookOpen },
+    { id: 'profile',     label: 'My Profile',            icon: User },
   ];
 
   const adminLinks = [
-    { id: 'dashboard',  label: 'Dashboard',            icon: Activity },
-    { id: 'approvals',  label: 'Approvals Queue',       icon: FileCheck },
-    { id: 'tasks',      label: 'Tasks & Schedule',      icon: CalendarIcon },
-    { id: 'repository', label: 'Department Repository', icon: BookOpen },
-    { id: 'directory',  label: 'Faculty Directory',     icon: Users },
-    { id: 'profile',    label: 'My Profile',            icon: User },
+    { id: 'dashboard',   label: 'Dashboard',            icon: Activity },
+    { id: 'approvals',   label: 'Approvals Queue',       icon: FileCheck },
+    { id: 'scheduling',  label: 'Course Scheduling',     icon: CalendarDays },
+    { id: 'workload',    label: 'Workload Management',   icon: Briefcase },
+    { id: 'tasks',       label: 'Tasks & Schedule',      icon: CalendarIcon },
+    { id: 'repository',  label: 'Department Repository', icon: BookOpen },
+    { id: 'directory',   label: 'Faculty Directory',     icon: Users },
+    { id: 'profile',     label: 'My Profile',            icon: User },
   ];
 
   const superadminLinks = [
-    { id: 'dashboard',  label: 'Dashboard',            icon: Activity },
-    { id: 'usermgmt',   label: 'User Management',       icon: Shield },
-    { id: 'tasks',      label: 'Tasks & Schedule',      icon: CalendarIcon },
-    { id: 'repository', label: 'Department Repository', icon: BookOpen },
-    { id: 'directory',  label: 'Faculty Directory',     icon: Users },
-    { id: 'profile',    label: 'My Profile',            icon: User },
+    { id: 'dashboard',   label: 'Dashboard',            icon: Activity },
+    { id: 'usermgmt',    label: 'User Management',       icon: Shield },
+    { id: 'scheduling',  label: 'Course Scheduling',     icon: CalendarDays },
+    { id: 'workload',    label: 'Workload Management',   icon: Briefcase },
+    { id: 'tasks',       label: 'Tasks & Schedule',      icon: CalendarIcon },
+    { id: 'repository',  label: 'Department Repository', icon: BookOpen },
+    { id: 'directory',   label: 'Faculty Directory',     icon: Users },
+    { id: 'profile',     label: 'My Profile',            icon: User },
   ];
 
   const links = isSuperAdmin ? superadminLinks : isAdmin ? adminLinks : facultyLinks;

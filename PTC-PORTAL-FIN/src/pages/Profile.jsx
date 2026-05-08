@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   User, Mail, Briefcase, Phone, Lock, 
@@ -6,17 +6,44 @@ import {
   Eye, EyeOff, UploadCloud, Camera
 } from 'lucide-react';
 
+const API_BASE = '/api';
+
 export default function Profile({ user, onUpdateUser }) {
   // --- CORE PROFILE STATES ---
   const [profileData, setProfileData] = useState({
-    firstName: user?.name?.split(' ')[0] || '',
-    lastName: user?.name?.split(' ').slice(1).join(' ') || '',
-    email: user?.email || '',
-    specialization: user?.title || 'Instructor',
-    contactNumber: '09123456789' // Mock data
+    firstName:     user?.first_name || '',
+    lastName:      user?.last_name  || '',
+    email:         user?.email      || '',
+    specialization: user?.specialization || 'Instructor',
+    contactNumber: user?.contact_no || ''
   });
-  const [profilePic, setProfilePic] = useState(null); // Saved Display Picture
+  const [profilePic, setProfilePic] = useState(user?.profile_photo || null);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch fresh profile data on mount
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/profile/me`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setProfileData({
+            firstName:     data.first_name    || '',
+            lastName:      data.last_name     || '',
+            email:         data.email         || '',
+            specialization: data.specialization || 'Instructor',
+            contactNumber: data.contact_no    || '',
+          });
+          // FIX: store the raw path; rendering will prepend BACKEND_URL
+          if (data.profile_photo) setProfilePic(data.profile_photo);
+        }
+      } catch (err) {
+        console.error('Profile fetch error:', err);
+      }
+    };
+    fetchProfile();
+  }, []);
 
   // --- PRIVACY STATES (EYE TOGGLES) ---
   const [showEmail, setShowEmail] = useState(false);
@@ -40,6 +67,7 @@ export default function Profile({ user, onUpdateUser }) {
   const [passError, setPassError] = useState('');
 
   const fileInputRef = useRef(null);
+  const [selectedPhotoFile, setSelectedPhotoFile] = useState(null); // FIX: use state, not DOM property
 
   // --- HANDLERS ---
   const handleProfileChange = (field, value, limit) => {
@@ -50,33 +78,91 @@ export default function Profile({ user, onUpdateUser }) {
 
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      // Strictly accept JPG and PNG
-      if (file.type === 'image/jpeg' || file.type === 'image/png') {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setTempProfilePic(reader.result);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        alert('Upload Error: Only .JPG and .PNG files are allowed.');
-      }
+    if (!file) return;
+    if (file.type !== 'image/jpeg' && file.type !== 'image/png') {
+      alert('Upload Error: Only .JPG and .PNG files are allowed.');
+      return;
     }
+    // FIX: Check 10MB limit on frontend too
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Upload Error: File size must not exceed 10MB.');
+      return;
+    }
+    // Show preview immediately
+    const reader = new FileReader();
+    reader.onloadend = () => setTempProfilePic(reader.result);
+    reader.readAsDataURL(file);
+    // FIX: Store file in state, not on DOM element
+    setSelectedPhotoFile(file);
   };
 
-  const handleSaveProfile = (e) => {
+  // FIX: Backend base URL for serving uploaded images
+  const BACKEND_URL = 'http://localhost:3000';
+
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
-    setProfilePic(tempProfilePic); // Apply the preview image to the actual profile
-    setIsSettingsModalOpen(false);
-    setMessage({ type: 'success', text: 'Profile information and ID updated successfully.' });
-    setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-    
-    if (onUpdateUser) {
-      onUpdateUser({
-        ...user,
-        name: `${profileData.firstName} ${profileData.lastName}`,
-        title: profileData.specialization
+    setIsSaving(true);
+    let savedPhotoUrl = profilePic; // track the latest saved photo URL
+    try {
+      // 1. Upload photo first if a new one was selected
+      if (selectedPhotoFile) {
+        const formData = new FormData();
+        formData.append('photo', selectedPhotoFile);
+        const photoRes = await fetch(`${API_BASE}/profile/me/photo`, {
+          method: 'POST', credentials: 'include', body: formData,
+        });
+        if (photoRes.ok) {
+          const photoData = await photoRes.json();
+          savedPhotoUrl = photoData.profile_photo; // e.g. "/uploads/profiles/..."
+          setProfilePic(savedPhotoUrl);
+        } else {
+          const errData = await photoRes.json();
+          setMessage({ type: 'error', text: errData.message || 'Failed to upload photo.' });
+          setIsSaving(false);
+          return;
+        }
+        // FIX: Clear selected file from state after successful upload
+        setSelectedPhotoFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+
+      // 2. Save general info
+      const res = await fetch(`${API_BASE}/profile/me`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          first_name:     profileData.firstName,
+          last_name:      profileData.lastName,
+          contact_no:     profileData.contactNumber,
+          specialization: profileData.specialization,
+        }),
       });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage({ type: 'error', text: data.message || 'Failed to save profile.' });
+        return;
+      }
+
+      setIsSettingsModalOpen(false);
+      setMessage({ type: 'success', text: 'Profile information updated successfully.' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+
+      // FIX: Include profile_photo in onUpdateUser so parent state stays in sync
+      if (onUpdateUser) {
+        onUpdateUser({
+          ...user,
+          first_name:     profileData.firstName,
+          last_name:      profileData.lastName,
+          specialization: profileData.specialization,
+          profile_photo:  savedPhotoUrl,
+        });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Network error. Please try again.' });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -98,13 +184,32 @@ export default function Profile({ user, onUpdateUser }) {
     setIsConfirmModalOpen(true);
   };
 
-  const finalizePasswordChange = () => {
+  const finalizePasswordChange = async () => {
     setIsConfirmModalOpen(false);
-    setIsSettingsModalOpen(false);
-    setPassForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
-    setShowOldPass(false); setShowNewPass(false); setShowConfirmPass(false);
-    setMessage({ type: 'success', text: 'Password securely changed.' });
-    setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    try {
+      const res = await fetch(`${API_BASE}/profile/me/password`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          old_password:     passForm.oldPassword,
+          new_password:     passForm.newPassword,
+          confirm_password: passForm.confirmPassword,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPassError(data.message || 'Failed to change password.');
+        return;
+      }
+      setIsSettingsModalOpen(false);
+      setPassForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      setShowOldPass(false); setShowNewPass(false); setShowConfirmPass(false);
+      setMessage({ type: 'success', text: 'Password changed successfully.' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (err) {
+      setPassError('Network error. Please try again.');
+    }
   };
 
   const openSettingsModal = () => {
@@ -117,6 +222,10 @@ export default function Profile({ user, onUpdateUser }) {
     setPassError('');
     setPassForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
     setShowOldPass(false); setShowNewPass(false); setShowConfirmPass(false);
+    // FIX: discard any pending photo selection when closing without saving
+    setSelectedPhotoFile(null);
+    setTempProfilePic(profilePic);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setTimeout(() => setActiveTab('info'), 300);
   };
 
@@ -173,7 +282,7 @@ export default function Profile({ user, onUpdateUser }) {
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-gray-800 mb-1">Profile Display Picture</h4>
-                      <p className="text-[10px] text-gray-500 font-medium mb-3">Accepts .JPG or .PNG only (Max 2MB)</p>
+                      <p className="text-[10px] text-gray-500 font-medium mb-3">Accepts .JPG or .PNG only (Max 10MB)</p>
                       <input 
                         type="file" 
                         accept=".jpg,.jpeg,.png" 
@@ -238,7 +347,7 @@ export default function Profile({ user, onUpdateUser }) {
                   </div>
                   <div className="flex justify-end pt-4">
                     <button type="submit" className="px-8 py-3 bg-[#0e5c2b] hover:bg-[#0a4720] text-white font-bold rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2">
-                      <Save size={18} /> Save Info Changes
+                      {isSaving ? 'Saving...' : <><Save size={18} className='mr-2' /> Save Info Changes</>}
                     </button>
                   </div>
                 </form>
@@ -388,7 +497,8 @@ export default function Profile({ user, onUpdateUser }) {
               <div className="w-32 h-32 bg-white rounded-full p-1.5 shadow-xl">
                 <div className="w-full h-full bg-gray-50 rounded-full flex items-center justify-center text-[#0e5c2b] border-2 border-green-50 overflow-hidden">
                   {profilePic ? (
-                    <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
+                    // FIX: prepend backend URL so "/uploads/profiles/..." resolves correctly
+                    <img src={profilePic.startsWith('http') ? profilePic : `${BACKEND_URL}${profilePic}`} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
                     <User size={48} />
                   )}
@@ -398,7 +508,7 @@ export default function Profile({ user, onUpdateUser }) {
             
             <h2 className="mt-5 text-2xl font-bold text-gray-900 leading-tight">{profileData.firstName} {profileData.lastName}</h2>
             <p className="text-[10px] font-black text-green-700 uppercase tracking-[0.2em] bg-green-50 px-3 py-1.5 rounded-full mt-3 border border-green-100 shadow-sm">
-              {user?.role?.replace('_', ' ')}
+              {user?.role_name?.replace(/_/g, ' ') || user?.role?.replace('_', ' ')}
             </p>
 
             {/* ID Card Info Section */}

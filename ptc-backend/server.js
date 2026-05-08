@@ -56,10 +56,23 @@ app.get('/api/health', (req, res) => {
 // Auth routes (login, logout, me)
 app.use('/api/auth', require('./src/routes/auth'));
 
+// User Management routes
+//app.use('/api/users', require('./src/routes/users'));
+
+// Grade Encoding routes (Faculty)
+//app.use('/api/grades', require('./src/routes/grades'));
+
+// Grade Approvals routes (Admin: Dean, VPAA, Registrar)
+//app.use('/api/grade-approvals', require('./src/routes/gradeApprovals'));
 
 // Department Repository routes (All users)
 app.use('/api/repository', require('./src/routes/repository'));
 
+// Profile routes (All logged-in users)
+app.use('/api/profile', require('./src/routes/profile'));
+
+// Faculty Directory routes (Admin + System Admin)
+//app.use('/api/directory', require('./src/routes/directory'));
 
 // Tasks, Events & Announcements routes (All users)
 app.use('/api/tasks', require('./src/routes/tasks'));
