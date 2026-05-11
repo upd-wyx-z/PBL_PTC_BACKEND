@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Search, X, User, Mail, Phone, Briefcase, Building, 
@@ -6,76 +6,17 @@ import {
   Eye, Shield, Users
 } from 'lucide-react';
 
-// --- MOCK DATABASE DATA (Based on PTC_DB users & roles schema) ---
-const DIRECTORY_USERS = [
-  {
-    user_id: 1,
-    first_name: 'John Kennidy',
-    last_name: 'Abunda',
-    email: 'faculty@ptc.edu.ph',
-    contact_no: '09123456789',
-    role: 'Faculty',
-    department: 'IICT',
-    specialization: 'Web Systems and Technologies',
-    profile_pic: null,
-    status: 'Active'
-  },
-  {
-    user_id: 2,
-    first_name: 'Angel Cylo G.',
-    last_name: 'Real',
-    email: 'dean@ptc.edu.ph',
-    contact_no: '09198765432',
-    role: 'Dean',
-    department: 'IICT',
-    specialization: 'Information Assurance and Security',
-    profile_pic: null,
-    status: 'Active'
-  },
-  {
-    user_id: 3,
-    first_name: 'Maria Clara',
-    last_name: 'Santos',
-    email: 'registrar@ptc.edu.ph',
-    contact_no: '09223334455',
-    role: 'Registrar',
-    department: 'Administration',
-    specialization: 'Student Records & Admissions',
-    profile_pic: null,
-    status: 'Active'
-  },
-  {
-    user_id: 4,
-    first_name: 'Jose',
-    last_name: 'Rizal',
-    email: 'vpaa@ptc.edu.ph',
-    contact_no: '09998887766',
-    role: 'VPAA',
-    department: 'Administration',
-    specialization: 'Academic Affairs',
-    profile_pic: null,
-    status: 'Active'
-  },
-  {
-    user_id: 5,
-    first_name: 'Anna',
-    last_name: 'Reyes',
-    email: 'areyes@ptc.edu.ph',
-    contact_no: '09176543210',
-    role: 'Faculty',
-    department: 'CBM',
-    specialization: 'Business Administration',
-    profile_pic: null,
-    status: 'Active'
-  }
-];
-
-const DEPARTMENTS = ['All Departments', 'IICT', 'CBM', 'Administration'];
-const ROLES = ['All Roles', 'Faculty', 'Dean', 'Registrar', 'VPAA', 'System Admin'];
+const API_BASE        = '/api';
+const BACKEND_URL     = 'http://localhost:3000';
 
 export default function Directory({ user }) {
-  const [usersList] = useState(DIRECTORY_USERS);
-  
+  // --- REAL DATA FROM BACKEND ---
+  const [usersList,    setUsersList]    = useState([]);
+  const [departments,  setDepartments]  = useState([]);
+  const [roles,        setRoles]        = useState([]);
+  const [isLoading,    setIsLoading]    = useState(true);
+  const [error,        setError]        = useState('');
+
   // --- STATES FOR SEARCH & FILTER ---
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('All Departments');
@@ -89,47 +30,104 @@ export default function Directory({ user }) {
   // --- MODAL STATE ---
   const [selectedUser, setSelectedUser] = useState(null);
 
+  // ── Fetch filter options on mount ──────────────────────────
+  useEffect(() => {
+    const fetchOptions = async () => {
+      try {
+        const [deptRes, roleRes] = await Promise.all([
+          fetch(`${API_BASE}/directory/departments`, { credentials: 'include' }),
+          fetch(`${API_BASE}/directory/roles`,       { credentials: 'include' }),
+        ]);
+        if (deptRes.ok) {
+          const deptData = await deptRes.json();
+          // Build dropdown options: "All Departments" + dept_code values
+          setDepartments(['All Departments', ...deptData.departments.map(d => d.dept_code)]);
+        }
+        if (roleRes.ok) {
+          const roleData = await roleRes.json();
+          setRoles(['All Roles', ...roleData.roles]);
+        }
+      } catch (err) {
+        console.error('Failed to load filter options:', err);
+      }
+    };
+    fetchOptions();
+  }, []);
+
+  // ── Fetch users whenever search/filter changes ─────────────
+  const fetchUsers = useCallback(async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const params = new URLSearchParams();
+      if (searchTerm)                         params.set('search',     searchTerm);
+      if (filterDept !== 'All Departments')   params.set('department', filterDept);
+      if (filterRole !== 'All Roles')         params.set('role',       filterRole);
+
+      const res = await fetch(`${API_BASE}/directory?${params.toString()}`, {
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to fetch directory.');
+      const data = await res.json();
+      setUsersList(data.users || []);
+    } catch (err) {
+      setError('Could not load directory. Please try again.');
+      console.error('fetchUsers error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchTerm, filterDept, filterRole]);
+
+  useEffect(() => {
+    // Debounce search input — wait 400ms after user stops typing
+    const timer = setTimeout(() => { fetchUsers(); }, 400);
+    return () => clearTimeout(timer);
+  }, [fetchUsers]);
+
+  // ── Helper: resolve profile photo URL ─────────────────────
+  const resolvePhoto = (path) => {
+    if (!path) return null;
+    return path.startsWith('http') ? path : `${BACKEND_URL}${path}`;
+  };
+
+  // ── Normalize role display from DB role_name ───────────────
+  const formatRole = (role_name = '') =>
+    role_name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
   // --- SORTING LOGIC ---
   const toggleSort = (key) => {
     if (sortBy === key) {
       setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     } else {
       setSortBy(key);
-      setSortDir('asc'); // Default to ascending for names/strings
+      setSortDir('asc');
     }
   };
 
-  // --- FILTERING & PROCESSING LOGIC ---
-  let processedUsers = usersList.filter(u => {
-    const fullName = `${u.first_name} ${u.last_name}`.toLowerCase();
-    const matchesSearch = fullName.includes(searchTerm.toLowerCase()) || 
-                          u.email.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesDept = filterDept === 'All Departments' || u.department === filterDept;
-    const matchesRole = filterRole === 'All Roles' || u.role === filterRole;
-
-    return matchesSearch && matchesDept && matchesRole;
-  });
-
-  processedUsers.sort((a, b) => {
+  // --- CLIENT-SIDE SORT (filtering/search already done by backend) ---
+  let processedUsers = [...usersList].sort((a, b) => {
     let valA, valB;
-
     if (sortBy === 'name') {
-      valA = a.last_name.toLowerCase();
-      valB = b.last_name.toLowerCase();
+      valA = (a.last_name  || '').toLowerCase();
+      valB = (b.last_name  || '').toLowerCase();
+    } else if (sortBy === 'department') {
+      valA = (a.dept_code  || '').toLowerCase();
+      valB = (b.dept_code  || '').toLowerCase();
+    } else if (sortBy === 'role') {
+      valA = (a.role_name  || '').toLowerCase();
+      valB = (b.role_name  || '').toLowerCase();
     } else {
-      valA = a[sortBy]?.toLowerCase() || '';
-      valB = b[sortBy]?.toLowerCase() || '';
+      valA = (a[sortBy]    || '').toLowerCase();
+      valB = (b[sortBy]    || '').toLowerCase();
     }
-
     if (valA < valB) return sortDir === 'asc' ? -1 : 1;
-    if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+    if (valA > valB) return sortDir === 'asc' ? 1  : -1;
     return 0;
   });
 
   let activeFilterCount = 0;
   if (filterDept !== 'All Departments') activeFilterCount++;
-  if (filterRole !== 'All Roles') activeFilterCount++;
+  if (filterRole !== 'All Roles')       activeFilterCount++;
 
   return (
     <div className="space-y-6 h-full max-w-[1600px] mx-auto animate-in fade-in duration-300 relative">
@@ -157,7 +155,7 @@ export default function Directory({ user }) {
                   onChange={(e) => setFilterDept(e.target.value)}
                   className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium"
                 >
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  {departments.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
               <div>
@@ -167,7 +165,7 @@ export default function Directory({ user }) {
                   onChange={(e) => setFilterRole(e.target.value)}
                   className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium"
                 >
-                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  {roles.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
             </div>
@@ -203,8 +201,8 @@ export default function Directory({ user }) {
               {/* Profile Picture */}
               <div className="w-32 h-32 bg-white rounded-full p-1.5 shadow-xl mx-auto mb-4 border-4 border-white">
                 <div className="w-full h-full bg-gray-50 rounded-full flex items-center justify-center text-[#0e5c2b] overflow-hidden">
-                  {selectedUser.profile_pic ? (
-                    <img src={selectedUser.profile_pic} alt={selectedUser.first_name} className="w-full h-full object-cover" />
+                  {selectedUser.profile_photo ? (
+                    <img src={resolvePhoto(selectedUser.profile_photo)} alt={selectedUser.first_name} className="w-full h-full object-cover" />
                   ) : (
                     <User size={50} />
                   )}
@@ -215,7 +213,7 @@ export default function Directory({ user }) {
                 {selectedUser.first_name} {selectedUser.last_name}
               </h2>
               <p className="text-[10px] font-black text-green-700 uppercase tracking-widest bg-green-50 px-3 py-1.5 rounded-full inline-block mt-3 border border-green-100 shadow-sm">
-                {selectedUser.role}
+                {formatRole(selectedUser.role_name)}
               </p>
 
               {/* ID Card Info Section */}
@@ -223,13 +221,13 @@ export default function Directory({ user }) {
                 <div className="flex flex-col bg-gray-50 p-4 rounded-2xl border border-gray-100">
                   <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1.5">Department</span>
                   <span className="text-sm font-bold text-gray-800 flex items-center">
-                    <Building size={16} className="mr-2 text-green-700"/> {selectedUser.department}
+                    <Building size={16} className="mr-2 text-green-700"/> {selectedUser.dept_name || selectedUser.dept_code || '—'}
                   </span>
                 </div>
                 <div className="flex flex-col bg-gray-50 p-4 rounded-2xl border border-gray-100">
                   <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1.5">Specialization</span>
                   <span className="text-sm font-bold text-gray-800 flex items-center">
-                    <Briefcase size={16} className="mr-2 text-green-700"/> {selectedUser.specialization}
+                    <Briefcase size={16} className="mr-2 text-green-700"/> {selectedUser.specialization || '—'}
                   </span>
                 </div>
                 <div className="flex flex-col bg-gray-50 p-4 rounded-2xl border border-gray-100">
@@ -242,7 +240,7 @@ export default function Directory({ user }) {
                 <div className="flex flex-col bg-gray-50 p-4 rounded-2xl border border-gray-100">
                   <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1.5">Contact No.</span>
                   <span className="text-sm font-bold text-gray-800 flex items-center">
-                    <Phone size={16} className="mr-2 text-green-700"/> {selectedUser.contact_no}
+                    <Phone size={16} className="mr-2 text-green-700"/> {selectedUser.contact_no || '—'}
                   </span>
                 </div>
               </div>
@@ -283,7 +281,7 @@ export default function Directory({ user }) {
             </div>
             <div>
               <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Total Members</p>
-              <h2 className="text-lg font-bold text-gray-900 leading-none">{processedUsers.length} <span className="text-xs text-gray-400 font-medium">Active</span></h2>
+              <h2 className="text-lg font-bold text-gray-900 leading-none">{processedUsers.length} <span className="text-xs text-gray-400 font-medium">{isLoading ? 'Loading...' : 'Active'}</span></h2>
             </div>
           </div>
 
@@ -346,7 +344,22 @@ export default function Directory({ user }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {processedUsers.length === 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan="5" className="py-24 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                      <p className="text-gray-400 font-medium text-sm">Loading directory...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan="5" className="py-24 text-center">
+                    <p className="text-red-500 font-bold">{error}</p>
+                  </td>
+                </tr>
+              ) : processedUsers.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="py-24 text-center">
                     <Users className="mx-auto text-gray-200 mb-4" size={48} />
@@ -363,8 +376,8 @@ export default function Directory({ user }) {
                     <td className="px-8 py-4">
                       <div className="flex items-center">
                         <div className="w-12 h-12 bg-gray-100 rounded-full border border-gray-200 mr-4 overflow-hidden flex items-center justify-center shrink-0">
-                          {member.profile_pic ? (
-                            <img src={member.profile_pic} alt="Profile" className="w-full h-full object-cover" />
+                          {member.profile_photo ? (
+                            <img src={resolvePhoto(member.profile_photo)} alt="Profile" className="w-full h-full object-cover" />
                           ) : (
                             <User size={20} className="text-gray-400" />
                           )}
@@ -381,21 +394,21 @@ export default function Directory({ user }) {
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-xs font-bold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm flex items-center w-max">
-                        <Building size={14} className="mr-2 text-gray-400"/> {member.department}
+                        <Building size={14} className="mr-2 text-gray-400"/> {member.dept_code || '—'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center text-xs font-bold text-gray-700">
-                        {member.role.includes('Admin') || member.role.includes('Dean') || member.role.includes('VPAA') || member.role.includes('Registrar') 
+                        {member.role_name !== 'faculty'
                           ? <Shield size={14} className="mr-2 text-orange-500" /> 
                           : <User size={14} className="mr-2 text-blue-500" />
                         }
-                        {member.role}
+                        {formatRole(member.role_name)}
                       </div>
                     </td>
                     <td className="px-6 py-4 hidden lg:table-cell">
                       <span className="text-sm font-medium text-gray-600 truncate max-w-[200px] block">
-                        {member.specialization}
+                        {member.specialization || '—'}
                       </span>
                     </td>
                     <td className="px-8 py-4 text-right">

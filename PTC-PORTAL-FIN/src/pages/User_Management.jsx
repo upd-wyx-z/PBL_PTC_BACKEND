@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Search, X, User, Mail, Phone, Briefcase, Building, 
@@ -8,102 +8,227 @@ import {
   Key
 } from 'lucide-react';
 
-// --- MOCK DATABASE DATA ---
-const INITIAL_USERS = [
-  { user_id: 1, first_name: 'John Kennidy', last_name: 'Abunda', email: 'faculty@ptc.edu.ph', contact_no: '09123456789', role: 'Faculty', department: 'IICT', specialization: 'Web Systems and Technologies', status: 'Active', is_online: true },
-  { user_id: 2, first_name: 'Angel Cylo G.', last_name: 'Real', email: 'dean@ptc.edu.ph', contact_no: '09198765432', role: 'Dean', department: 'IICT', specialization: 'Information Assurance and Security', status: 'Active', is_online: true },
-  { user_id: 3, first_name: 'Maria Clara', last_name: 'Santos', email: 'registrar@ptc.edu.ph', contact_no: '09223334455', role: 'Registrar', department: 'Administration', specialization: 'Student Records & Admissions', status: 'Active', is_online: false },
-  { user_id: 4, first_name: 'Jose', last_name: 'Rizal', email: 'vpaa@ptc.edu.ph', contact_no: '09998887766', role: 'VPAA', department: 'Administration', specialization: 'Academic Affairs', status: 'Deactivated', is_online: false },
-  { user_id: 5, first_name: 'Anna', last_name: 'Reyes', email: 'areyes@ptc.edu.ph', contact_no: '09176543210', role: 'Faculty', department: 'CBM', specialization: 'Business Administration', status: 'Active', is_online: false }
-];
-
-const DEPARTMENTS = ['All Departments', 'IICT', 'CBM', 'Administration'];
-const ROLES = ['All Roles', 'Faculty', 'Dean', 'Registrar', 'VPAA', 'System Admin'];
-const STATUSES = ['All Statuses', 'Active', 'Deactivated'];
+const API_BASE = '/api';
 
 export default function UserManagement({ user }) {
-  const [usersList, setUsersList] = useState(INITIAL_USERS);
-  
+  // --- REAL DATA FROM BACKEND ---
+  const [usersList,    setUsersList]    = useState([]);
+  const [departments,  setDepartments]  = useState([]);
+  const [roles,        setRoles]        = useState([]);
+  const [metrics,      setMetrics]      = useState({ activeCount: 0, deactivatedCount: 0, onlineCount: 0, offlineCount: 0 });
+  const [isLoading,    setIsLoading]    = useState(true);
+  const [error,        setError]        = useState('');
+  const [actionMsg,    setActionMsg]    = useState(''); // success/error feedback
+
   // --- STATES FOR SEARCH, FILTER, & SORT ---
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterDept, setFilterDept] = useState('All Departments');
-  const [filterRole, setFilterRole] = useState('All Roles');
-  const [filterStatus, setFilterStatus] = useState('All Statuses');
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [searchTerm,    setSearchTerm]    = useState('');
+  const [filterDept,    setFilterDept]    = useState('All Departments');
+  const [filterRole,    setFilterRole]    = useState('All Roles');
+  const [filterStatus,  setFilterStatus]  = useState('All Statuses');
+  const [isFilterOpen,  setIsFilterOpen]  = useState(false);
   
-  const [sortBy, setSortBy] = useState('name');
-  const [sortDir, setSortDir] = useState('asc');
+  const [sortBy,    setSortBy]    = useState('name');
+  const [sortDir,   setSortDir]   = useState('asc');
   const [isSortOpen, setIsSortOpen] = useState(false);
 
   // --- MODAL STATES ---
-  const [userModal, setUserModal] = useState({ isOpen: false, mode: 'add', data: null });
+  const [userModal,     setUserModal]     = useState({ isOpen: false, mode: 'add', data: null });
   const [securityModal, setSecurityModal] = useState({ isOpen: false, action: null, payload: null });
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, user: null, newPassword: '', confirmPassword: '', error: '' });
   
-  const [authPassword, setAuthPassword] = useState('');
-  const [showAuthPass, setShowAuthPass] = useState(false);
+  const [authPassword,      setAuthPassword]      = useState('');
+  const [authError,         setAuthError]         = useState('');
+  const [authLoading,       setAuthLoading]       = useState(false);
+  const [showAuthPass,      setShowAuthPass]      = useState(false);
   const [showPassModalPass, setShowPassModalPass] = useState(false);
 
-  // --- METRICS CALCULATION ---
-  const activeCount = usersList.filter(u => u.status === 'Active').length;
-  const deactivatedCount = usersList.filter(u => u.status === 'Deactivated').length;
-  const onlineCount = usersList.filter(u => u.is_online).length;
-  const offlineCount = usersList.length - onlineCount;
+  // ── Flash a temporary status message ─────────────────────
+  const showMessage = (msg, isError = false) => {
+    setActionMsg(isError ? `❌ ${msg}` : `✅ ${msg}`);
+    setTimeout(() => setActionMsg(''), 4000);
+  };
 
-  // --- LOGIC: SECURITY VERIFICATION ---
+  // ── Fetch filter options on mount ──────────────────────────
+  useEffect(() => {
+    const fetchOptions = async () => {
+      try {
+        const [deptRes, roleRes] = await Promise.all([
+          fetch(`${API_BASE}/users/departments`, { credentials: 'include' }),
+          fetch(`${API_BASE}/users/roles`,       { credentials: 'include' }),
+        ]);
+        if (deptRes.ok) {
+          const d = await deptRes.json();
+          setDepartments(['All Departments', ...d.departments.map(dep => dep.dept_code)]);
+        }
+        if (roleRes.ok) {
+          const r = await roleRes.json();
+          setRoles(['All Roles', ...r.roles]);
+        }
+      } catch (err) {
+        console.error('Failed to load filter options:', err);
+      }
+    };
+    fetchOptions();
+  }, []);
+
+  // ── Fetch metrics ─────────────────────────────────────────
+  const fetchMetrics = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/users/metrics`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setMetrics(data);
+      }
+    } catch (err) {
+      console.error('Failed to load metrics:', err);
+    }
+  }, []);
+
+  // ── Fetch users (debounced on search/filter change) ───────
+  const fetchUsers = useCallback(async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const params = new URLSearchParams();
+      if (searchTerm)                           params.set('search',     searchTerm);
+      if (filterDept !== 'All Departments')     params.set('department', filterDept);
+      if (filterRole !== 'All Roles')           params.set('role',       filterRole);
+      if (filterStatus !== 'All Statuses')      params.set('status',     filterStatus);
+
+      const res = await fetch(`${API_BASE}/users?${params.toString()}`, {
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to fetch users.');
+      const data = await res.json();
+      setUsersList(data.users || []);
+    } catch (err) {
+      setError('Could not load users. Please try again.');
+      console.error('fetchUsers error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchTerm, filterDept, filterRole, filterStatus]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchUsers();
+      fetchMetrics();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [fetchUsers, fetchMetrics]);
+
+  // ── LOGIC: SECURITY VERIFICATION (now hits real backend) ──
   const initiateSecureAction = (action, payload) => {
     setAuthPassword('');
+    setAuthError('');
     setShowAuthPass(false);
     setSecurityModal({ isOpen: true, action, payload });
   };
 
-  const executeSecureAction = (e) => {
+  const executeSecureAction = async (e) => {
     e.preventDefault();
-    if (!authPassword) return; // Mock check: require any string for password
-    
-    const { action, payload } = securityModal;
-    
-    if (action === 'add') {
-      setUsersList([...usersList, { ...payload, user_id: Date.now(), is_online: false }]);
-      setUserModal({ isOpen: false });
-    } 
-    else if (action === 'edit') {
-      setUsersList(usersList.map(u => u.user_id === payload.user_id ? { ...u, ...payload } : u));
-      setUserModal({ isOpen: false });
-    } 
-    else if (action === 'toggleStatus') {
-      setUsersList(usersList.map(u => u.user_id === payload.user_id ? { ...u, status: u.status === 'Active' ? 'Deactivated' : 'Active', is_online: false } : u));
-    } 
-    else if (action === 'delete') {
-      setUsersList(usersList.filter(u => u.user_id !== payload.user_id));
-    }
-    else if (action === 'changePassword') {
-      // Mock password change - just close and alert
-      setPasswordModal({ isOpen: false, user: null, newPassword: '', confirmPassword: '', error: '' });
-      alert(`Password successfully changed for user: ${payload.first_name} ${payload.last_name}`);
-    }
+    if (!authPassword) return;
+    setAuthLoading(true);
+    setAuthError('');
 
-    setSecurityModal({ isOpen: false, action: null, payload: null });
+    const { action, payload } = securityModal;
+
+    try {
+      let res, data;
+
+      if (action === 'add') {
+        res = await fetch(`${API_BASE}/users`, {
+          method:      'POST',
+          credentials: 'include',
+          headers:     { 'Content-Type': 'application/json' },
+          body:        JSON.stringify({ ...payload, admin_password: authPassword }),
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+        setUserModal({ isOpen: false });
+        showMessage(data.message);
+
+      } else if (action === 'edit') {
+        res = await fetch(`${API_BASE}/users/${payload.user_id}`, {
+          method:      'PUT',
+          credentials: 'include',
+          headers:     { 'Content-Type': 'application/json' },
+          body:        JSON.stringify({ ...payload, admin_password: authPassword }),
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+        setUserModal({ isOpen: false });
+        showMessage(data.message);
+
+      } else if (action === 'toggleStatus') {
+        res = await fetch(`${API_BASE}/users/${payload.user_id}/status`, {
+          method:      'PATCH',
+          credentials: 'include',
+          headers:     { 'Content-Type': 'application/json' },
+          body:        JSON.stringify({ admin_password: authPassword }),
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+        showMessage(data.message);
+
+      } else if (action === 'delete') {
+        res = await fetch(`${API_BASE}/users/${payload.user_id}`, {
+          method:      'DELETE',
+          credentials: 'include',
+          headers:     { 'Content-Type': 'application/json' },
+          body:        JSON.stringify({ admin_password: authPassword }),
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+        showMessage(data.message);
+
+      } else if (action === 'changePassword') {
+        res = await fetch(`${API_BASE}/users/${payload.user_id}/password`, {
+          method:      'PATCH',
+          credentials: 'include',
+          headers:     { 'Content-Type': 'application/json' },
+          body:        JSON.stringify({
+            new_password:   payload.new_password,
+            admin_password: authPassword,
+          }),
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+        setPasswordModal({ isOpen: false, user: null, newPassword: '', confirmPassword: '', error: '' });
+        showMessage(data.message);
+      }
+
+      // Refresh list and metrics after any mutation
+      await fetchUsers();
+      await fetchMetrics();
+      setSecurityModal({ isOpen: false, action: null, payload: null });
+
+    } catch (err) {
+      setAuthError(err.message || 'Action failed. Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
-  // --- LOGIC: USER FORMS ---
+  // ── LOGIC: USER FORMS ─────────────────────────────────────
   const handleUserFormSubmit = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const userData = {
-      first_name: formData.get('first_name'),
-      last_name: formData.get('last_name'),
-      email: formData.get('email'),
-      contact_no: formData.get('contact_no'),
-      role: formData.get('role'),
-      department: formData.get('department'),
+      first_name:     formData.get('first_name'),
+      last_name:      formData.get('last_name'),
+      email:          formData.get('email'),
+      contact_no:     formData.get('contact_no'),
+      role:           formData.get('role'),
+      department:     formData.get('department'),
       specialization: formData.get('specialization'),
-      status: formData.get('status') || 'Active'
+      status:         formData.get('status') || 'Active',
     };
 
-    if (userModal.mode === 'edit') {
-      userData.user_id = userModal.data.user_id;
-      userData.is_online = userModal.data.is_online;
+    if (userModal.mode === 'add') {
+      userData.initial_password = formData.get('initial_password');
+    } else {
+      userData.user_id  = userModal.data.user_id;
     }
 
     initiateSecureAction(userModal.mode, userData);
@@ -119,17 +244,15 @@ export default function UserManagement({ user }) {
       setPasswordModal(prev => ({ ...prev, error: 'Password must be at least 8 characters.' }));
       return;
     }
-    
-    // Initiate security verification for changing the password
-    initiateSecureAction('changePassword', { 
-      user_id: passwordModal.user.user_id, 
-      first_name: passwordModal.user.first_name,
-      last_name: passwordModal.user.last_name,
-      new_password: passwordModal.newPassword 
+    initiateSecureAction('changePassword', {
+      user_id:      passwordModal.user.user_id,
+      first_name:   passwordModal.user.first_name,
+      last_name:    passwordModal.user.last_name,
+      new_password: passwordModal.newPassword,
     });
   };
 
-  // --- LOGIC: SORTING & FILTERING ---
+  // ── LOGIC: SORTING (client-side, backend already filtered) ─
   const toggleSort = (key) => {
     if (sortBy === key) {
       setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
@@ -139,35 +262,34 @@ export default function UserManagement({ user }) {
     }
   };
 
-  let processedUsers = usersList.filter(u => {
-    const fullName = `${u.first_name} ${u.last_name}`.toLowerCase();
-    const matchesSearch = fullName.includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDept = filterDept === 'All Departments' || u.department === filterDept;
-    const matchesRole = filterRole === 'All Roles' || u.role === filterRole;
-    const matchesStatus = filterStatus === 'All Statuses' || u.status === filterStatus;
-
-    return matchesSearch && matchesDept && matchesRole && matchesStatus;
-  });
-
-  processedUsers.sort((a, b) => {
+  let processedUsers = [...usersList].sort((a, b) => {
     let valA, valB;
     if (sortBy === 'name') {
-      valA = a.last_name.toLowerCase(); valB = b.last_name.toLowerCase();
+      valA = (a.last_name  || '').toLowerCase();
+      valB = (b.last_name  || '').toLowerCase();
     } else {
-      valA = a[sortBy]?.toLowerCase() || ''; valB = b[sortBy]?.toLowerCase() || '';
+      valA = (a[sortBy] || '').toLowerCase();
+      valB = (b[sortBy] || '').toLowerCase();
     }
     if (valA < valB) return sortDir === 'asc' ? -1 : 1;
-    if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+    if (valA > valB) return sortDir === 'asc' ? 1  : -1;
     return 0;
   });
 
   let activeFilterCount = 0;
-  if (filterDept !== 'All Departments') activeFilterCount++;
-  if (filterRole !== 'All Roles') activeFilterCount++;
-  if (filterStatus !== 'All Statuses') activeFilterCount++;
+  if (filterDept   !== 'All Departments') activeFilterCount++;
+  if (filterRole   !== 'All Roles')       activeFilterCount++;
+  if (filterStatus !== 'All Statuses')    activeFilterCount++;
 
   return (
     <div className="space-y-6 h-full max-w-[1600px] mx-auto animate-in fade-in duration-300 relative">
+
+      {/* Action feedback toast */}
+      {actionMsg && (
+        <div className={`fixed bottom-6 right-6 z-[99999] px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-bold text-white transition-all animate-in slide-in-from-bottom-4 ${actionMsg.startsWith('❌') ? 'bg-red-600' : 'bg-green-700'}`}>
+          {actionMsg}
+        </div>
+      )}
 
       {/* =========================================
           MODALS PORTAL
@@ -182,9 +304,15 @@ export default function UserManagement({ user }) {
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">Security Verification</h3>
             <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-              Please enter your Registrar password to authorize this system action.
+              Please enter your admin password to authorize this system action.
             </p>
             
+            {authError && (
+              <div className="mb-4 p-3 bg-red-50 text-red-700 text-xs font-bold rounded-xl flex items-center text-left">
+                <AlertCircle size={14} className="mr-2 shrink-0" /> {authError}
+              </div>
+            )}
+
             <div className="relative mb-8 text-left">
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Admin Password</label>
               <input 
@@ -205,14 +333,18 @@ export default function UserManagement({ user }) {
               <button 
                 type="button" onClick={() => setSecurityModal({ isOpen: false, action: null, payload: null })}
                 className="flex-1 py-3.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold rounded-xl transition-all"
+                disabled={authLoading}
               >
                 Cancel
               </button>
               <button 
                 type="submit"
-                className="flex-1 py-3.5 px-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95"
+                disabled={authLoading}
+                className="flex-1 py-3.5 px-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Verify & Proceed
+                {authLoading ? (
+                  <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Verifying...</>
+                ) : 'Verify & Proceed'}
               </button>
             </div>
           </form>
@@ -234,7 +366,7 @@ export default function UserManagement({ user }) {
               </button>
             </div>
 
-            <form onSubmit={handleUserFormSubmit} className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-6">
+            <form onSubmit={handleUserFormSubmit} className="p-8 overflow-y-auto flex-1 space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
                   <div className="flex justify-between">
@@ -278,14 +410,14 @@ export default function UserManagement({ user }) {
 
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Department</label>
-                  <select name="department" defaultValue={userModal.data?.department || 'IICT'} className="w-full p-3.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium">
-                    {DEPARTMENTS.slice(1).map(d => <option key={d} value={d}>{d}</option>)}
+                  <select name="department" defaultValue={userModal.data?.department || (departments[1] || '')} className="w-full p-3.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium">
+                    {departments.filter(d => d !== 'All Departments').map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">System Role</label>
                   <select name="role" defaultValue={userModal.data?.role || 'Faculty'} className="w-full p-3.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium">
-                    {ROLES.slice(1).map(r => <option key={r} value={r}>{r}</option>)}
+                    {roles.filter(r => r !== 'All Roles').map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
 
@@ -296,6 +428,17 @@ export default function UserManagement({ user }) {
                   </div>
                   <input name="specialization" type="text" maxLength={50} defaultValue={userModal.data?.specialization || ''} className="w-full p-3.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium" placeholder="e.g. Web Systems and Technologies" />
                 </div>
+
+                {/* Initial Password — only shown when adding a new user */}
+                {userModal.mode === 'add' && (
+                  <div className="sm:col-span-2">
+                    <div className="flex justify-between">
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Initial Password</label>
+                      <span className="text-[9px] text-gray-400 font-bold uppercase">Min 8 chars</span>
+                    </div>
+                    <input name="initial_password" type="password" required minLength={8} maxLength={25} className="w-full p-3.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium" placeholder="Set initial password for this account" />
+                  </div>
+                )}
 
                 {userModal.mode === 'edit' && (
                   <div className="sm:col-span-2">
@@ -326,7 +469,7 @@ export default function UserManagement({ user }) {
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 sm:p-8 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6 border-b border-gray-50 pb-4">
               <h2 className="text-sm font-bold text-gray-800 uppercase tracking-widest flex items-center">
-                <SlidersHorizontal size={18} className="mr-2 text-green-700" /> Filter Directory
+                <SlidersHorizontal size={18} className="mr-2 text-green-700" /> Filter Users
               </h2>
               <button onClick={() => setIsFilterOpen(false)} className="p-2 border border-gray-200 rounded-full hover:bg-gray-50 text-gray-600 transition-all active:scale-90">
                 <X size={16} strokeWidth={2.5} />
@@ -337,19 +480,19 @@ export default function UserManagement({ user }) {
               <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Department</label>
                 <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium">
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  {departments.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">System Role</label>
                 <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium">
-                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  {roles.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Account Status</label>
                 <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium">
-                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                  {['All Statuses', 'Active', 'Deactivated'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
             </div>
@@ -377,7 +520,7 @@ export default function UserManagement({ user }) {
             </div>
             
             <p className="text-xs text-gray-500 mb-4">
-              Set a new password for <span className="font-bold text-gray-800">{passwordModal.user.first_name} {passwordModal.user.last_name}</span>.
+              Set a new password for <span className="font-bold text-gray-800">{passwordModal.user?.first_name} {passwordModal.user?.last_name}</span>.
             </p>
 
             {passwordModal.error && (
@@ -448,21 +591,21 @@ export default function UserManagement({ user }) {
         <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-gray-50 rounded-2xl border border-gray-200 p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="p-3 bg-green-100 text-green-700 rounded-xl"><UserCheck size={24} /></div>
-            <div><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Active Users</p><h2 className="text-2xl font-bold text-gray-900 leading-none">{activeCount}</h2></div>
+            <div><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Active Users</p><h2 className="text-2xl font-bold text-gray-900 leading-none">{metrics.activeCount}</h2></div>
           </div>
           <div className="bg-gray-50 rounded-2xl border border-gray-200 p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="p-3 bg-red-100 text-red-700 rounded-xl"><UserX size={24} /></div>
-            <div><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Deactivated</p><h2 className="text-2xl font-bold text-gray-900 leading-none">{deactivatedCount}</h2></div>
+            <div><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Deactivated</p><h2 className="text-2xl font-bold text-gray-900 leading-none">{metrics.deactivatedCount}</h2></div>
           </div>
           <div className="bg-gray-50 rounded-2xl border border-gray-200 p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="p-3 bg-blue-100 text-blue-700 rounded-xl">
               <span className="relative flex h-6 w-6 items-center justify-center"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-20"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>
             </div>
-            <div><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Online Now</p><h2 className="text-2xl font-bold text-gray-900 leading-none">{onlineCount}</h2></div>
+            <div><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Online Now</p><h2 className="text-2xl font-bold text-gray-900 leading-none">{metrics.onlineCount}</h2></div>
           </div>
           <div className="bg-gray-50 rounded-2xl border border-gray-200 p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="p-3 bg-gray-200 text-gray-500 rounded-xl"><UserMinus size={24} /></div>
-            <div><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Offline</p><h2 className="text-2xl font-bold text-gray-900 leading-none">{offlineCount}</h2></div>
+            <div><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Offline</p><h2 className="text-2xl font-bold text-gray-900 leading-none">{metrics.offlineCount}</h2></div>
           </div>
         </div>
       </div>
@@ -487,7 +630,7 @@ export default function UserManagement({ user }) {
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-3 shrink-0 ml-auto">
             
-            {/* Custom Sort Dropdown Component */}
+            {/* Custom Sort Dropdown */}
             <div className="relative">
               <button 
                 onClick={() => setIsSortOpen(!isSortOpen)}
@@ -548,7 +691,22 @@ export default function UserManagement({ user }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {processedUsers.length === 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan="5" className="py-24 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                      <p className="text-gray-400 font-medium text-sm">Loading users...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan="5" className="py-24 text-center">
+                    <p className="text-red-500 font-bold">{error}</p>
+                  </td>
+                </tr>
+              ) : processedUsers.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="py-24 text-center">
                     <Users className="mx-auto text-gray-200 mb-4" size={48} />
@@ -605,7 +763,6 @@ export default function UserManagement({ user }) {
                           <Edit size={16} />
                         </button>
                         
-                        {/* Change Password Button */}
                         <button 
                           onClick={() => setPasswordModal({ isOpen: true, user: member, newPassword: '', confirmPassword: '', error: '' })}
                           className="p-2 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg transition-all border border-transparent hover:border-yellow-100"
@@ -614,7 +771,6 @@ export default function UserManagement({ user }) {
                           <Key size={16} />
                         </button>
 
-                        {/* Toggle Active/Deactivated */}
                         <button 
                           onClick={() => initiateSecureAction('toggleStatus', member)}
                           className={`p-2 rounded-lg transition-all border border-transparent ${
@@ -627,7 +783,6 @@ export default function UserManagement({ user }) {
                           {member.status === 'Active' ? <PowerOff size={16} /> : <Power size={16} />}
                         </button>
 
-                        {/* Delete Button */}
                         <button 
                           onClick={() => initiateSecureAction('delete', member)}
                           className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all border border-transparent hover:border-red-100"
@@ -648,7 +803,7 @@ export default function UserManagement({ user }) {
   );
 }
 
-// UserPlusIcon Component
+// UserPlusIcon Component (unchanged)
 function UserPlusIcon(props) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

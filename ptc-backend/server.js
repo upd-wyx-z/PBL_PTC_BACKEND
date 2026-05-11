@@ -57,7 +57,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', require('./src/routes/auth'));
 
 // User Management routes
-//app.use('/api/users', require('./src/routes/users'));
+app.use('/api/users', require('./src/routes/users'));
 
 // Grade Encoding routes (Faculty)
 //app.use('/api/grades', require('./src/routes/grades'));
@@ -72,7 +72,7 @@ app.use('/api/repository', require('./src/routes/repository'));
 app.use('/api/profile', require('./src/routes/profile'));
 
 // Faculty Directory routes (Admin + System Admin)
-//app.use('/api/directory', require('./src/routes/directory'));
+app.use('/api/directory', require('./src/routes/directory'));
 
 // Tasks, Events & Announcements routes (All users)
 app.use('/api/tasks', require('./src/routes/tasks'));
