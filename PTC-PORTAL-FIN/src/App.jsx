@@ -16,15 +16,13 @@ import Grades from './pages/Grades';
 import UserManagement from './pages/User_Management';
 import SystemSettings from './pages/System_Settings';
 import GradeApprovals from './pages/Grade_Approvals';
-
-// --- NEW PAGES (added by classmate) ---
 import DeanWorkload from './pages/Dean_Workload';
 import FacultyWorkload from './pages/Faculty_Workload';
 import RegistrarScheduling from './pages/Registrar_Scheduling';
 
 // ============================================================
 //  API BASE URL — points to your Express backend
-//  Make sure your backend is running on port 3000
+//  Make sure backend is running on port 3000
 // ============================================================
 export const API_BASE = '/api';
 

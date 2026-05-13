@@ -59,12 +59,6 @@ app.use('/api/auth', require('./src/routes/auth'));
 // User Management routes
 app.use('/api/users', require('./src/routes/users'));
 
-// Grade Encoding routes (Faculty)
-//app.use('/api/grades', require('./src/routes/grades'));
-
-// Grade Approvals routes (Admin: Dean, VPAA, Registrar)
-//app.use('/api/grade-approvals', require('./src/routes/gradeApprovals'));
-
 // Department Repository routes (All users)
 app.use('/api/repository', require('./src/routes/repository'));
 
@@ -79,6 +73,10 @@ app.use('/api/tasks', require('./src/routes/tasks'));
 
 // Dashboard routes (All logged-in users)
 app.use('/api/dashboard', require('./src/routes/dashboard'));
+
+app.use('/api/scheduling', require('./src/routes/scheduling'));
+
+app.use('/api/workload', require('./src/routes/workload'));
 
 // ─────────────────────────────────────────────────────────────
 //  404 HANDLER

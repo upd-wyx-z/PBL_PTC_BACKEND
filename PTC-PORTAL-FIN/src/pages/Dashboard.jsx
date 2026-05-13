@@ -6,7 +6,6 @@ import {
   X, MapPin, Flag, Activity, User, CalendarDays
 } from 'lucide-react';
 
-// ✅ NO local MOCK data here — all data comes from App.jsx via props
 // Props: user, setCurrentView, tasks, eventsList, announcements
 
 export default function Dashboard({ user, setCurrentView, tasks, eventsList, announcements }) {

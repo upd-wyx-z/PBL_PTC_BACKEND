@@ -275,7 +275,7 @@ export default function Profile({ user, onUpdateUser }) {
                   <div className="flex items-center gap-5 p-5 bg-white border border-gray-100 rounded-2xl shadow-sm mb-2">
                     <div className="w-20 h-20 rounded-full bg-gray-50 border-2 border-dashed border-gray-300 overflow-hidden flex items-center justify-center relative shrink-0">
                       {tempProfilePic ? (
-                        <img src={tempProfilePic} alt="Preview" className="w-full h-full object-cover" />
+                        <img src={tempProfilePic.startsWith('data:') || tempProfilePic.startsWith('http') ? tempProfilePic : `${BACKEND_URL}${tempProfilePic}`} alt="Preview" className="w-full h-full object-cover" />
                       ) : (
                         <User size={32} className="text-gray-300" />
                       )}
