@@ -26,6 +26,13 @@ export default function TasksSchedule({ user, tasks, setTasks, eventsList, setEv
   const [taskModalState, setTaskModalState]               = useState({ isOpen: false, mode: null, data: null });
   const [eventModalState, setEventModalState]             = useState({ isOpen: false, mode: null, data: null });
   const [announcementModalState, setAnnouncementModalState] = useState({ isOpen: false, mode: null, data: null });
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  // ── Toast helper ─────────────────────────────────────────
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3500);
+  };
 
   const TASK_TYPES   = ['Grade Sheets', 'Uploads', 'Evaluation', 'Meeting', 'Administrative'];
   const DEPT_OPTIONS = ['All Departments', 'IICT', 'CBM', 'Administration'];
@@ -136,8 +143,9 @@ export default function TasksSchedule({ user, tasks, setTasks, eventsList, setEv
         }
       }
       closeTaskModal();
+      showToast(mode === 'create' ? 'Task created successfully!' : 'Task updated successfully!');
     } catch (err) {
-      setError('Failed to save task. Please try again.');
+      showToast('Failed to save task. Please try again.', 'error');
     }
   };
 
@@ -152,9 +160,10 @@ export default function TasksSchedule({ user, tasks, setTasks, eventsList, setEv
       if (res.ok) {
         setTasks(prev => prev.filter(t => t.task_id !== taskId));
         closeTaskModal();
+        showToast('Task has been successfully deleted!');
       }
     } catch (err) {
-      setError('Failed to delete task. Please try again.');
+      showToast('❌ Failed to delete task. Please try again.', 'error');
     }
   };
 
@@ -213,8 +222,9 @@ export default function TasksSchedule({ user, tasks, setTasks, eventsList, setEv
         }
       }
       closeEventModal();
+      showToast(mode === 'create' ? 'Schedule added successfully!' : 'Schedule updated successfully!');
     } catch (err) {
-      setError('Failed to save event. Please try again.');
+      showToast('Failed to save schedule. Please try again.', 'error');
     }
   };
 
@@ -229,9 +239,10 @@ export default function TasksSchedule({ user, tasks, setTasks, eventsList, setEv
       if (res.ok) {
         setEventsList(prev => prev.filter(ev => ev.event_id !== eventId));
         closeEventModal();
+        showToast('Schedule has been successfully deleted!');
       }
     } catch (err) {
-      setError('Failed to delete event. Please try again.');
+      showToast('❌ Failed to delete schedule. Please try again.', 'error');
     }
   };
 
@@ -346,6 +357,22 @@ export default function TasksSchedule({ user, tasks, setTasks, eventsList, setEv
         </div>
       )}
 
+      {/* Success/Error Toast Notification */}
+      {toast.show && (
+        <div className={`fixed top-6 right-6 z-[100] flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border animate-in fade-in slide-in-from-top-4 duration-300 ${
+          toast.type === 'error'
+            ? 'bg-red-50 border-red-200 text-red-800'
+            : 'bg-green-50 border-green-200 text-green-800'
+        }`}>
+          <CheckCircle2 size={20} className={toast.type === 'error' ? 'text-red-500' : 'text-green-600'} />
+          <p className="text-sm font-bold">{toast.message}</p>
+          <button onClick={() => setToast({ show: false, message: '', type: 'success' })}
+            className="ml-2 text-gray-400 hover:text-gray-600">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* ── Page Header ─────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
@@ -374,9 +401,7 @@ export default function TasksSchedule({ user, tasks, setTasks, eventsList, setEv
                 <div className="bg-green-100 p-2.5 rounded-xl mr-4"><CalendarIcon className="text-green-700" size={24} /></div>
                 <h2 className="text-xl font-bold text-gray-800 tracking-tight">Upcoming Schedule</h2>
               </div>
-              <button onClick={openNewEventModal} className="px-4 py-2 bg-green-700 hover:bg-green-800 text-white font-bold rounded-xl text-sm transition-all shadow-md flex items-center active:scale-95">
-                <Plus size={15} className="mr-1.5" /> Add
-              </button>
+
             </div>
             <div className="space-y-6 flex-1 overflow-y-auto pr-2">
               {Object.keys(groupedEvents).length === 0 ? (

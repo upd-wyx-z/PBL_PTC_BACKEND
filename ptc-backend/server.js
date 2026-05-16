@@ -74,9 +74,20 @@ app.use('/api/tasks', require('./src/routes/tasks'));
 // Dashboard routes (All logged-in users)
 app.use('/api/dashboard', require('./src/routes/dashboard'));
 
+// Register Schedule 
 app.use('/api/scheduling', require('./src/routes/scheduling'));
 
+// Dean & Faculty Workload
 app.use('/api/workload', require('./src/routes/workload'));
+
+// System Settings routes (System Admin only)
+app.use('/api/system', require('./src/routes/systemSettings'));
+
+// Grade Encoding routes (Faculty)
+//app.use('/api/grades', require('./src/routes/grades'));
+ 
+// Grade Approvals routes (Admin: Dean, VPAA, Registrar)
+//app.use('/api/grade-approvals', require('./src/routes/gradeApprovals'));
 
 // ─────────────────────────────────────────────────────────────
 //  404 HANDLER
@@ -114,4 +125,4 @@ app.listen(PORT, async () => {
   } catch (err) {
     console.error('⚠️  Could not clear sessions on startup:', err.message);
   }
-});
+}); 

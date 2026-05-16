@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Search, X, User, ArrowUpDown, ArrowUp, ArrowDown, SlidersHorizontal, 
@@ -6,89 +6,133 @@ import {
   AlertTriangle, CheckCircle2, Calendar, Settings, RefreshCw, HardDrive
 } from 'lucide-react';
 
-// --- MOCK DATABASE DATA (Audit Logs) ---
-const INITIAL_LOGS = [
-  { log_id: 1, user_name: 'System Admin', role: 'System Admin', module: 'System Settings', action: 'Modified Backup Schedule', timestamp: '2026-04-22T09:15:00Z', details: 'Changed auto-backup frequency from Weekly to Daily.' },
-  { log_id: 2, user_name: 'Maria Clara', role: 'Registrar', module: 'User Management', action: 'Deactivated User', timestamp: '2026-04-21T14:30:00Z', details: 'Deactivated account for user_id: 4 (Jose Rizal).' },
-  { log_id: 3, user_name: 'John Kennidy Abunda', role: 'Faculty', module: 'Grading System', action: 'Submitted Grades', timestamp: '2026-04-20T16:45:00Z', details: 'Submitted final grades for ITE314 - BSIT 3A.' },
-  { log_id: 4, user_name: 'Angel Cylo G. Real', role: 'Dean', module: 'Filing System', action: 'Uploaded Document', timestamp: '2026-04-20T10:00:00Z', details: 'Uploaded Q1_Department_Budget_Request.xlsx (Admins Only).' },
-  { log_id: 5, user_name: 'Maria Clara', role: 'Registrar', module: 'User Management', action: 'Created User', timestamp: '2026-04-19T11:20:00Z', details: 'Created new Faculty account for Anna Reyes.' },
-  { log_id: 6, user_name: 'System Admin', role: 'System Admin', module: 'System Settings', action: 'System Restore', timestamp: '2026-03-01T02:00:00Z', details: 'Restored database from backup file backup_20260228.zip.' },
-];
-
-const MODULES = ['All Modules', 'User Management', 'Filing System', 'Grading System', 'System Settings', 'Tasks & Schedule'];
+const API_BASE = '/api';
+const MODULES  = ['All Modules', 'User Management', 'Department Repository', 'Grading System', 'System Settings', 'Tasks & Schedule', 'Course Scheduling', 'Workload Management'];
 
 export default function SystemSettings({ user }) {
-  // --- STATES ---
-  const [activeTab, setActiveTab] = useState('audit'); // 'audit' | 'backup'
-  
-  // Audit States
-  const [logs] = useState(INITIAL_LOGS);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterModule, setFilterModule] = useState('All Modules');
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [sortBy, setSortBy] = useState('timestamp');
-  const [sortDir, setSortDir] = useState('desc');
-  const [isSortOpen, setIsSortOpen] = useState(false);
+  // ── Tab ───────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState('audit');
+
+  // ── Audit States ──────────────────────────────────────────
+  const [logs,          setLogs]          = useState([]);
+  const [totalLogs,     setTotalLogs]     = useState(0);
+  const [isLoading,     setIsLoading]     = useState(true);
+  const [error,         setError]         = useState('');
+  const [searchTerm,    setSearchTerm]    = useState('');
+  const [filterModule,  setFilterModule]  = useState('All Modules');
+  const [isFilterOpen,  setIsFilterOpen]  = useState(false);
+  const [sortBy,        setSortBy]        = useState('timestamp');
+  const [sortDir,       setSortDir]       = useState('desc');
+  const [isSortOpen,    setIsSortOpen]    = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
-  // Backup States
+  // ── Backup States ─────────────────────────────────────────
   const [autoBackupConfig, setAutoBackupConfig] = useState({
-    enabled: true,
+    enabled:   true,
     frequency: 'daily',
-    time: '02:00',
-    retention: '30'
+    time:      '02:00',
+    retention: '30',
   });
+  const [isBackupLoading,    setIsBackupLoading]    = useState(false);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+
+  // ── Notification ──────────────────────────────────────────
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
 
-  // --- HELPERS ---
   const showNotification = (msg, type = 'success') => {
     setNotification({ show: true, message: msg, type });
     setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 4000);
   };
 
-  // --- LOGIC: AUDIT SORTING & FILTERING ---
+  // ── Fetch audit logs ──────────────────────────────────────
+  const fetchLogs = useCallback(async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const params = new URLSearchParams();
+      if (searchTerm.trim())              params.set('search',  searchTerm.trim());
+      if (filterModule !== 'All Modules') params.set('module',  filterModule);
+      params.set('sortBy',  sortBy === 'timestamp' ? 'created_at' : sortBy);
+      params.set('sortDir', sortDir);
+      params.set('limit',   '100');
+
+      const res = await fetch(`${API_BASE}/system/audit-logs?${params.toString()}`, {
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to fetch audit logs.');
+      const data = await res.json();
+      setLogs(data.logs   || []);
+      setTotalLogs(data.total || 0);
+    } catch (err) {
+      setError('Could not load audit logs. Please try again.');
+      console.error('fetchLogs error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchTerm, filterModule, sortBy, sortDir]);
+
+  useEffect(() => {
+    if (activeTab !== 'audit') return;
+    const timer = setTimeout(() => fetchLogs(), 400);
+    return () => clearTimeout(timer);
+  }, [fetchLogs, activeTab]);
+
+  // ── Fetch backup config on tab switch ────────────────────
+  useEffect(() => {
+    if (activeTab !== 'backup') return;
+    const fetchConfig = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/system/backup-config`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setAutoBackupConfig({
+            enabled:   data.enabled,
+            frequency: data.frequency,
+            time:      data.time,
+            retention: data.retention,
+          });
+        }
+      } catch (err) {
+        console.error('fetchBackupConfig error:', err);
+      }
+    };
+    fetchConfig();
+  }, [activeTab]);
+
+  // ── Sort toggle ───────────────────────────────────────────
   const toggleSort = (key) => {
     if (sortBy === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     else { setSortBy(key); setSortDir('desc'); }
   };
 
-  let processedLogs = logs.filter(log => {
-    const matchesSearch = log.user_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          log.details.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesModule = filterModule === 'All Modules' || log.module === filterModule;
-    return matchesSearch && matchesModule;
-  });
-
-  processedLogs.sort((a, b) => {
-    let valA = a[sortBy], valB = b[sortBy];
-    if (sortBy === 'timestamp') {
-      valA = new Date(valA).getTime(); valB = new Date(valB).getTime();
-    } else {
-      valA = valA.toLowerCase(); valB = valB.toLowerCase();
-    }
-    if (valA < valB) return sortDir === 'asc' ? -1 : 1;
-    if (valA > valB) return sortDir === 'asc' ? 1 : -1;
-    return 0;
-  });
-
-  // --- ACTIONS ---
-  const handleExportPDF = (e) => {
+  // ── Export PDF — fetches FRESH data from backend (up to 5000 logs) ─
+  // NOTE: This is better than filtering the already-loaded 100 logs —
+  // it queries the DB fresh so no logs are missed in the export.
+  const handleExportPDF = async (e) => {
     e.preventDefault();
-    const formData = new FormData(e.target);
-    const startDate = formData.get('start_date');
-    const endDate = formData.get('end_date');
+    const formData     = new FormData(e.target);
+    const startDate    = formData.get('start_date');
+    const endDate      = formData.get('end_date');
     const targetModule = formData.get('target_module');
-    
-    // 1. Filter the logs based on the modal inputs
-    const exportLogs = logs.filter(log => {
-      const logDate = new Date(log.timestamp).toISOString().split('T')[0];
-      const matchesModule = targetModule === 'All Modules' || log.module === targetModule;
-      const matchesDate = logDate >= startDate && logDate <= endDate;
-      return matchesModule && matchesDate;
-    });
+
+    // Fetch fresh logs from backend with date range filter
+    let exportLogs = [];
+    try {
+      const params = new URLSearchParams({
+        module:      targetModule,
+        start_date:  startDate,
+        end_date:    endDate,
+        limit:       5000,
+      });
+      const res = await fetch(`${API_BASE}/system/audit-logs?${params}`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        exportLogs = data.logs || [];
+      }
+    } catch (err) {
+      showNotification('Failed to fetch logs for export.', 'error');
+      return;
+    }
 
     if (exportLogs.length === 0) {
       setIsExportModalOpen(false);
@@ -96,9 +140,8 @@ export default function SystemSettings({ user }) {
       return;
     }
 
-    // 2. Generate a clean HTML Document to trigger Print to PDF
+    // Generate clean HTML document and trigger Print to PDF
     const printWindow = window.open('', '_blank', 'height=800,width=1000');
-    
     let htmlContent = `
       <html>
         <head>
@@ -136,7 +179,10 @@ export default function SystemSettings({ user }) {
     `;
 
     exportLogs.forEach(log => {
-      const dateStr = new Date(log.timestamp).toLocaleString('en-GB', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const dateStr = new Date(log.timestamp).toLocaleString('en-GB', {
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
       htmlContent += `
         <tr>
           <td class="timestamp">${dateStr}</td>
@@ -148,59 +194,100 @@ export default function SystemSettings({ user }) {
       `;
     });
 
-    htmlContent += `
-            </tbody>
-          </table>
-        </body>
-      </html>
-    `;
-
+    htmlContent += `</tbody></table></body></html>`;
     printWindow.document.write(htmlContent);
     printWindow.document.close();
     printWindow.focus();
-
-    // 3. Trigger the print dialog automatically
-    setTimeout(() => {
-      printWindow.print();
-      // Optional: close the window after printing, but leaving it open is safer for some browsers
-      // printWindow.close(); 
-    }, 500);
+    setTimeout(() => { printWindow.print(); }, 500);
 
     setIsExportModalOpen(false);
-    showNotification(`Successfully generated PDF report for ${exportLogs.length} logs. Please use the print dialog to save.`);
+    showNotification(`Successfully generated PDF report for ${exportLogs.length} log/s.`);
   };
 
-  const handleManualBackup = () => {
-    showNotification('System backup initiated. Downloading PTC_DB_Backup.zip...');
+  // ── Manual Backup — real download ────────────────────────
+  const handleManualBackup = async () => {
+    setIsBackupLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/system/backup`, {
+        method:      'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Backup failed.');
+
+      // Trigger file download
+      const blob      = await res.blob();
+      const url        = URL.createObjectURL(blob);
+      const link       = document.createElement('a');
+      const today      = new Date().toISOString().split('T')[0];
+      link.href        = url;
+      link.download    = `PTC_Backup_${today}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showNotification('System backup downloaded successfully!');
+
+      // Refresh audit logs since backup gets logged
+      await fetchLogs();
+    } catch (err) {
+      showNotification('Failed to generate backup. Please try again.', 'warning');
+      console.error('manualBackup error:', err);
+    } finally {
+      setIsBackupLoading(false);
+    }
   };
 
-  const handleSaveAutoBackup = (e) => {
+  // ── Save Auto Backup Config — real API ───────────────────
+  const handleSaveAutoBackup = async (e) => {
     e.preventDefault();
-    showNotification('Automated backup schedule updated successfully.');
+    try {
+      const res = await fetch(`${API_BASE}/system/backup-config`, {
+        method:      'PUT',
+        credentials: 'include',
+        headers:     { 'Content-Type': 'application/json' },
+        body:        JSON.stringify(autoBackupConfig),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      showNotification(data.message);
+    } catch (err) {
+      showNotification(err.message || 'Failed to save configuration.', 'warning');
+    }
   };
 
+  // ── Restore — still UI only (actual restore needs server-side pg_restore) ─
   const handleRestoreSubmit = (e) => {
     e.preventDefault();
     setIsRestoreModalOpen(false);
-    showNotification('System restore sequence initiated successfully.', 'warning');
+    showNotification('System restore sequence initiated. Please wait...', 'warning');
   };
 
+  // ─────────────────────────────────────────────────────────
+  //  RENDER
+  // ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 h-full max-w-[1600px] mx-auto animate-in fade-in duration-300 relative">
-      
+
       {/* NOTIFICATION TOAST */}
-      {notification.show && (
-        <div className={`fixed top-8 right-8 z-[9999] p-4 rounded-2xl shadow-xl flex items-center animate-in slide-in-from-top-4 border ${notification.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-yellow-50 border-yellow-200 text-yellow-800'}`}>
-          {notification.type === 'success' ? <CheckCircle2 className="mr-3 shrink-0" size={20}/> : <AlertTriangle className="mr-3 shrink-0" size={20}/>}
+      {notification.show && createPortal(
+        <div className={`fixed top-8 right-8 z-[10000] p-4 rounded-2xl shadow-xl flex items-center animate-in slide-in-from-top-4 border ${
+          notification.type === 'success'
+            ? 'bg-green-50 border-green-200 text-green-800'
+            : 'bg-yellow-50 border-yellow-200 text-yellow-800'
+        }`}>
+          {notification.type === 'success'
+            ? <CheckCircle2 className="mr-3 shrink-0" size={20}/>
+            : <AlertTriangle className="mr-3 shrink-0" size={20}/>
+          }
           <p className="text-sm font-bold">{notification.message}</p>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* =========================================
-          MODALS PORTAL
+          MODAL 1: EXPORT PDF
           ========================================= */}
-      
-      {/* 1. EXPORT PDF MODAL */}
       {isExportModalOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in" onClick={() => setIsExportModalOpen(false)}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
@@ -212,7 +299,7 @@ export default function SystemSettings({ user }) {
                 <X size={16} strokeWidth={2.5} />
               </button>
             </div>
-            
+
             <form onSubmit={handleExportPDF} className="space-y-5">
               <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Target Module</label>
@@ -241,7 +328,9 @@ export default function SystemSettings({ user }) {
         document.body
       )}
 
-      {/* 2. SYSTEM RESTORE MODAL */}
+      {/* =========================================
+          MODAL 2: SYSTEM RESTORE
+          ========================================= */}
       {isRestoreModalOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in" onClick={() => setIsRestoreModalOpen(false)}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
@@ -252,16 +341,16 @@ export default function SystemSettings({ user }) {
             <p className="text-sm text-gray-500 mb-6 leading-relaxed">
               Uploading a backup file will overwrite current database records. Please ensure you are uploading a valid <span className="font-bold text-gray-700">.sql</span> or <span className="font-bold text-gray-700">.zip</span> backup package.
             </p>
-            
+
             <form onSubmit={handleRestoreSubmit}>
               <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer mb-6">
                 <UploadCloud size={32} className="mx-auto text-gray-400 mb-2" />
                 <p className="text-sm font-bold text-gray-700">Click to select backup file</p>
               </div>
-              
+
               <div className="relative mb-8 text-left">
                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Admin Password Required</label>
-                <input 
+                <input
                   type="password" required
                   className="w-full p-3.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 outline-none text-sm font-medium bg-white"
                   placeholder="Verify password to authorize"
@@ -285,22 +374,22 @@ export default function SystemSettings({ user }) {
           ========================================= */}
       <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden flex flex-col md:flex-row justify-between md:items-end gap-6">
         <div className="absolute right-0 top-0 w-64 h-64 bg-green-50 rounded-full mix-blend-multiply filter blur-3xl opacity-50 -translate-y-1/2 translate-x-1/4 z-0"></div>
-        
+
         <div className="relative z-10">
           <h1 className="text-3xl font-bold text-gray-900 tracking-tight mb-1 flex items-center">
-             System Administration
+            System Administration
           </h1>
           <p className="text-sm text-gray-500 font-medium">Configure system parameters, audit logs, and backups.</p>
         </div>
 
         <div className="relative z-10 flex bg-gray-100 p-1 rounded-2xl shrink-0">
-          <button 
+          <button
             onClick={() => setActiveTab('audit')}
             className={`flex items-center px-6 py-3 text-sm font-bold uppercase tracking-widest rounded-xl transition-all ${activeTab === 'audit' ? 'bg-white text-green-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
             <History size={16} className="mr-2" /> Audit Trails
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('backup')}
             className={`flex items-center px-6 py-3 text-sm font-bold uppercase tracking-widest rounded-xl transition-all ${activeTab === 'backup' ? 'bg-white text-green-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
@@ -314,31 +403,35 @@ export default function SystemSettings({ user }) {
           ========================================= */}
       {activeTab === 'audit' && (
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden flex flex-col min-h-[500px] animate-in fade-in slide-in-from-bottom-4">
-          
-          {/* Integrated Toolbar */}
+
+          {/* Toolbar */}
           <div className="p-4 border-b border-gray-100 bg-gray-50/30 flex flex-wrap items-center gap-4">
-            
-            {/* Search Bar */}
+
+            {/* Total count badge */}
+            <div className="px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs font-black text-gray-500 uppercase tracking-widest shrink-0">
+              {totalLogs} Logs Total
+            </div>
+
+            {/* Search */}
             <div className="flex-1 relative min-w-[200px]">
               <Search className="absolute left-3.5 top-3 text-gray-400" size={16} />
-              <input 
-                type="text" placeholder="Search logs by user, action, or details..." 
+              <input
+                type="text" placeholder="Search logs by user, action, or details..."
                 value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium transition-shadow shadow-sm bg-white"
               />
             </div>
-            
+
             {/* Actions */}
             <div className="flex flex-wrap items-center gap-3 shrink-0 ml-auto">
-              
-              {/* Custom Sort Dropdown Component */}
+
+              {/* Sort */}
               <div className="relative">
-                <button 
+                <button
                   onClick={() => setIsSortOpen(!isSortOpen)}
                   className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl text-sm hover:bg-gray-50 transition-all shadow-sm">
                   <ArrowUpDown size={15} /> Sort
                 </button>
-                
                 {isSortOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsSortOpen(false)}></div>
@@ -359,15 +452,14 @@ export default function SystemSettings({ user }) {
                 )}
               </div>
 
-              {/* Filter Dropdown */}
+              {/* Filter Module */}
               <div className="relative">
-                <button 
+                <button
                   onClick={() => setIsFilterOpen(!isFilterOpen)}
                   className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl text-sm hover:bg-gray-50 transition-all shadow-sm">
                   <SlidersHorizontal size={15} /> Filter Module
                   {filterModule !== 'All Modules' && <span className="w-2 h-2 rounded-full bg-green-600"></span>}
                 </button>
-
                 {isFilterOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsFilterOpen(false)}></div>
@@ -384,8 +476,8 @@ export default function SystemSettings({ user }) {
                 )}
               </div>
 
-              {/* Export Button */}
-              <button 
+              {/* Export PDF */}
+              <button
                 onClick={() => setIsExportModalOpen(true)}
                 className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition-all shadow-md active:scale-95"
               >
@@ -407,7 +499,22 @@ export default function SystemSettings({ user }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {processedLogs.length === 0 ? (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan="5" className="py-24 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-gray-400 font-medium text-sm">Loading audit logs...</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : error ? (
+                  <tr>
+                    <td colSpan="5" className="py-24 text-center">
+                      <p className="text-red-500 font-bold">{error}</p>
+                    </td>
+                  </tr>
+                ) : logs.length === 0 ? (
                   <tr>
                     <td colSpan="5" className="py-24 text-center">
                       <History className="mx-auto text-gray-200 mb-4" size={48} />
@@ -415,7 +522,7 @@ export default function SystemSettings({ user }) {
                     </td>
                   </tr>
                 ) : (
-                  processedLogs.map((log) => (
+                  logs.map((log) => (
                     <tr key={log.log_id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="text-sm font-bold text-gray-700">
@@ -461,7 +568,7 @@ export default function SystemSettings({ user }) {
           ========================================= */}
       {activeTab === 'backup' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
-          
+
           {/* Card 1: Manual Backup */}
           <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-8 flex flex-col text-center hover:-translate-y-1 transition-transform">
             <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-blue-100 shadow-sm">
@@ -471,11 +578,16 @@ export default function SystemSettings({ user }) {
             <p className="text-sm text-gray-500 mb-8 leading-relaxed flex-1">
               Download an immediate, complete snapshot of the database, user files, and system configurations.
             </p>
-            <button 
+            <button
               onClick={handleManualBackup}
-              className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95 flex justify-center items-center"
+              disabled={isBackupLoading}
+              className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95 flex justify-center items-center disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <HardDrive size={18} className="mr-2" /> Download Backup Now
+              {isBackupLoading ? (
+                <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span> Generating...</>
+              ) : (
+                <><HardDrive size={18} className="mr-2" /> Download Backup Now</>
+              )}
             </button>
           </div>
 
@@ -488,7 +600,7 @@ export default function SystemSettings({ user }) {
             <p className="text-sm text-gray-500 mb-8 leading-relaxed flex-1">
               Upload a previously downloaded backup file to restore the entire system to an earlier state.
             </p>
-            <button 
+            <button
               onClick={() => setIsRestoreModalOpen(true)}
               className="w-full py-3.5 px-4 bg-yellow-500 hover:bg-yellow-600 text-white font-bold rounded-xl shadow-md transition-all active:scale-95 flex justify-center items-center"
             >
@@ -496,7 +608,7 @@ export default function SystemSettings({ user }) {
             </button>
           </div>
 
-          {/* Card 3: Automated Backup Settings */}
+          {/* Card 3: Auto Backup Settings */}
           <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-8 flex flex-col">
             <div className="flex items-center mb-6">
               <div className="w-12 h-12 bg-green-50 text-green-700 rounded-xl flex items-center justify-center mr-4 border border-green-100">
@@ -507,14 +619,13 @@ export default function SystemSettings({ user }) {
                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-0.5">Schedule Settings</p>
               </div>
             </div>
-            
+
             <form onSubmit={handleSaveAutoBackup} className="flex-1 flex flex-col space-y-5">
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
                 <span className="text-sm font-bold text-gray-700">Enable Automation</span>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="sr-only peer" 
+                  <input
+                    type="checkbox" className="sr-only peer"
                     checked={autoBackupConfig.enabled}
                     onChange={(e) => setAutoBackupConfig({...autoBackupConfig, enabled: e.target.checked})}
                   />
@@ -525,7 +636,7 @@ export default function SystemSettings({ user }) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Frequency</label>
-                  <select 
+                  <select
                     disabled={!autoBackupConfig.enabled}
                     value={autoBackupConfig.frequency}
                     onChange={(e) => setAutoBackupConfig({...autoBackupConfig, frequency: e.target.value})}
@@ -538,8 +649,8 @@ export default function SystemSettings({ user }) {
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Run Time</label>
-                  <input 
-                    type="time" 
+                  <input
+                    type="time"
                     disabled={!autoBackupConfig.enabled}
                     value={autoBackupConfig.time}
                     onChange={(e) => setAutoBackupConfig({...autoBackupConfig, time: e.target.value})}
@@ -549,21 +660,21 @@ export default function SystemSettings({ user }) {
               </div>
 
               <div>
-                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Retention Policy</label>
-                 <select 
-                    disabled={!autoBackupConfig.enabled}
-                    value={autoBackupConfig.retention}
-                    onChange={(e) => setAutoBackupConfig({...autoBackupConfig, retention: e.target.value})}
-                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium disabled:opacity-50"
-                  >
-                    <option value="7">Keep last 7 days</option>
-                    <option value="30">Keep last 30 days</option>
-                    <option value="90">Keep last 90 days</option>
-                  </select>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Retention Policy</label>
+                <select
+                  disabled={!autoBackupConfig.enabled}
+                  value={autoBackupConfig.retention}
+                  onChange={(e) => setAutoBackupConfig({...autoBackupConfig, retention: e.target.value})}
+                  className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium disabled:opacity-50"
+                >
+                  <option value="7">Keep last 7 days</option>
+                  <option value="30">Keep last 30 days</option>
+                  <option value="90">Keep last 90 days</option>
+                </select>
               </div>
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={!autoBackupConfig.enabled}
                 className="w-full mt-auto py-3.5 px-4 bg-[#0e5c2b] hover:bg-[#0a4720] text-white font-bold rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >

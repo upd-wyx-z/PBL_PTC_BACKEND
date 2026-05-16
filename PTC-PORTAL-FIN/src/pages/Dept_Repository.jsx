@@ -65,6 +65,13 @@ export default function Repository({ user }) {
   const [allUsers, setAllUsers]     = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [errorMsg, setErrorMsg]     = useState('');
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  // Toast helper
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3500);
+  };
   
   // States for Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
@@ -183,10 +190,12 @@ export default function Repository({ user }) {
       window.URL.revokeObjectURL(url);
       // Update download count locally
       setFiles(prev => prev.map(f => f.file_id === file.file_id ? { ...f, download_count: (f.download_count || 0) + 1 } : f));
-    } catch (err) { alert('Download failed. Please try again.'); }
+      showToast(`"${file.title || file.file_name}" downloaded successfully!`);
+    } catch (err) { showToast('Download failed. Please try again.', 'error'); }
   };
 
   const handleDeleteFile = async () => {
+    const fileName = deleteTarget?.title || deleteTarget?.file_name || 'File';
     try {
       const res = await fetch(`${API_BASE}/repository/${deleteTarget.file_id}`, {
         method: 'DELETE',
@@ -196,11 +205,12 @@ export default function Repository({ user }) {
         setFiles(prev => prev.filter(f => f.file_id !== deleteTarget.file_id));
         setDeleteTarget(null);
         setViewModalData(null);
+        showToast(`"${fileName}" has been successfully deleted!`);
       } else {
         const data = await res.json();
-        alert(data.message || 'Delete failed.');
+        showToast(data.message || 'Delete failed. Please try again.', 'error');
       }
-    } catch (err) { alert('Delete failed. Please try again.'); }
+    } catch (err) { showToast('Delete failed. Please try again.', 'error'); }
   };
 
   // --- UPLOAD HANDLERS ---
@@ -238,6 +248,7 @@ export default function Repository({ user }) {
       setFiles(prev => [data.file, ...prev]);
       setUploadModal(false);
       setUploadForm({ title: '', sy_id: 1, subject_id: '', remarks_faculty: '', deadline: '', visibility: 'all', visible_to: [], file: null });
+      showToast(`"${data.file?.title || uploadForm.title}" uploaded successfully!`);
     } catch (err) {
       setErrorMsg('Upload failed. Please try again.');
     } finally {
@@ -248,6 +259,21 @@ export default function Repository({ user }) {
 
   return (
     <div className="space-y-6 h-full max-w-[1600px] mx-auto animate-in fade-in duration-300 relative">
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className={`fixed top-6 right-6 z-[99999] flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border animate-in fade-in slide-in-from-top-4 duration-300 ${
+          toast.type === 'error'
+            ? 'bg-red-50 border-red-200 text-red-800'
+            : 'bg-green-50 border-green-200 text-green-800'
+        }`}>
+          <span className="text-sm font-bold">{toast.message}</span>
+          <button onClick={() => setToast({ show: false, message: '', type: 'success' })}
+            className="ml-2 text-gray-400 hover:text-gray-600 transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* =========================================
           MODAL: UPLOAD DOCUMENT
@@ -296,7 +322,7 @@ export default function Repository({ user }) {
                   <>
                     <Upload className="mx-auto text-gray-300 mb-3" size={36} />
                     <p className="text-sm font-bold text-gray-600">Drop file here or <span className="text-green-700 underline">browse</span></p>
-                    <p className="text-xs text-gray-400 mt-1">PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, PNG — max 50 MB</p>
+                    <p className="text-xs text-gray-400 mt-1">PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, PNG — max 500 MB</p>
                   </>
                 )}
               </div>

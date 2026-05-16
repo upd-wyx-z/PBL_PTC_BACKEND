@@ -62,7 +62,7 @@ async function getFacultyList(req, res) {
       JOIN roles r ON u.role_id = r.role_id
       LEFT JOIN departments d ON u.department_id = d.department_id
       WHERE u.is_active = TRUE
-        AND r.role_name IN ('faculty', 'admin_dean', 'admin_vpaa', 'admin_registrar')
+        AND r.role_name = 'faculty'
       ORDER BY u.last_name ASC, u.first_name ASC
     `);
     res.json({ faculty: result.rows });

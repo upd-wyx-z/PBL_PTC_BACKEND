@@ -290,7 +290,7 @@ async function getFacultyScheduleDetail(req, res) {
       days: sch.day_of_week,
     }));
 
-    const totalUnits    = schedules.reduce((sum, s) => sum + s.units, 0);
+    const totalUnits    = schedules.reduce((sum, s) => sum + parseInt(s.units, 10), 0);
     const totalSections = schedules.length;
 
     res.json({
@@ -527,7 +527,7 @@ async function getMyWorkload(req, res) {
       time: `${formatTime(sch.time_start)} - ${formatTime(sch.time_end)}`,
     }));
 
-    const totalUnits    = schedules.reduce((sum, s) => sum + s.units, 0);
+    const totalUnits    = schedules.reduce((sum, s) => sum + parseInt(s.units, 10), 0);
     const totalSections = schedules.length;
     const workloadRow   = statusResult.rows[0];
 

@@ -6,6 +6,7 @@ import {
   X, MapPin, Flag, Activity, User, CalendarDays
 } from 'lucide-react';
 
+// ✅ NO local MOCK data here — all data comes from App.jsx via props
 // Props: user, setCurrentView, tasks, eventsList, announcements
 
 export default function Dashboard({ user, setCurrentView, tasks, eventsList, announcements }) {
@@ -13,16 +14,16 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
   const [time, setTime] = useState(new Date());
   const [modalContent, setModalContent] = useState(null);
 
-  // Local state — Dashboard fetches its own data directly
-  // This fixes the empty calendar on first login problem
-  const [localTasks, setLocalTasks]               = useState(tasks || []);
-  const [localEvents, setLocalEvents]             = useState(eventsList || []);
-  const [localAnnouncements, setLocalAnnouncements] = useState(announcements || []);
-
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Local state — Dashboard fetches its own data directly
+  // This fixes the empty calendar on first login problem
+  const [localEvents, setLocalEvents]             = useState(eventsList || []);
+  const [localTasks, setLocalTasks]               = useState(tasks || []);
+  const [localAnnouncements, setLocalAnnouncements] = useState(announcements || []);
 
   // Self-fetch on mount — does NOT depend on App.jsx props timing
   useEffect(() => {
@@ -37,15 +38,15 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
         if (taskRes.ok) setLocalTasks(await taskRes.json());
         if (annRes.ok)  setLocalAnnouncements(await annRes.json());
       } catch (err) {
-        console.error('Dashboard fetch error:', err);
+        console.error('Dashboard self-fetch error:', err);
       }
     };
     fetchData();
   }, []);
 
-  // Also sync when props update (e.g. after Tasks page sets new data)
-  useEffect(() => { if (tasks?.length)         setLocalTasks(tasks); },         [tasks]);
-  useEffect(() => { if (eventsList?.length)    setLocalEvents(eventsList); },   [eventsList]);
+  // Sync when props update from App.jsx (after Tasks page sets new data)
+  useEffect(() => { if (tasks?.length)         setLocalTasks(tasks); },               [tasks]);
+  useEffect(() => { if (eventsList?.length)    setLocalEvents(eventsList); },         [eventsList]);
   useEffect(() => { if (announcements?.length) setLocalAnnouncements(announcements); }, [announcements]);
 
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -144,7 +145,7 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
   };
 
   return (
-    <div className="space-y-6 h-full max-w-[1600px] mx-auto relative">
+    <div className="space-y-6 max-w-[1600px] mx-auto relative">
 
       {/* MODAL */}
       {modalContent && createPortal(
@@ -216,13 +217,13 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
               </div>
             </div>
 
-            <div className="flex-1 bg-gray-50/30 p-1">
+            <div className="bg-gray-50/30 p-1">
               <div className="grid grid-cols-7 border-b bg-white py-3 shadow-sm">
                 {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
                   <div key={d} className="text-center text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{d}</div>
                 ))}
               </div>
-              <div className="grid grid-cols-7 h-full">
+              <div className="grid grid-cols-7">
                 {Array.from({length: (firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1)}).map((_, i) => (
                   <div key={`e-${i}`} className="border-r border-b bg-gray-50/50"></div>
                 ))}
@@ -242,7 +243,7 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
                   return (
                     <div
                       key={d}
-                      className="border-r border-b bg-white min-h-[100px] p-2 hover:bg-green-50/30 transition-colors group relative cursor-pointer"
+                      className="border-r border-b bg-white min-h-[90px] p-2 hover:bg-green-50/30 transition-colors group relative cursor-pointer"
                       onClick={() => { if (dayEvents.length > 0) setModalContent({ type: 'event', data: dayEvents[0] }); }}
                     >
                       <div className="flex justify-between items-start mb-2">
