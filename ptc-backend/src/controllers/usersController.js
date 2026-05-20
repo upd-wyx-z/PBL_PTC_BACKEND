@@ -31,14 +31,12 @@ async function getRoleId(roleLabel) {
     'VPAA':         'admin_vpaa',
     'System Admin': 'system_admin',
   };
-  const dbRoleName = roleMap[roleLabel];
-  if (!dbRoleName) return null;
 
-  const result = await pool.query(
-    `SELECT role_id FROM roles WHERE role_name = $1`,
-    [dbRoleName]
-  );
-  return result.rows[0]?.role_id || null;
+  const dbName = roleMap[roleLabel];
+  if (!dbName) return null; // Safety check
+
+  const result = await pool.query('SELECT role_id FROM roles WHERE role_name = $1', [dbName]);
+  return result.rows[0]?.role_id;
 }
 
 // ── HELPER: map DB role_name → frontend display label ────────
@@ -230,80 +228,86 @@ async function getUserMetrics(req, res) {
 // Body: { first_name, last_name, email, contact_no, role, department,
 //         specialization, admin_password, initial_password }
 async function createUser(req, res) {
+  let department_id = null;
+  let role_id = null;
+
   try {
+    const adminId = req.user.user_id;
+
+    // 1. Removed employee_no from req.body (the frontend doesn't send it anymore)
     const {
       first_name, last_name, email, contact_no,
       role, department, specialization,
-      admin_password, initial_password,
+      admin_password, initial_password
     } = req.body;
 
-    // --- Validate required fields ---
+    // 2. Removed employee_no from the validation check
     if (!first_name || !last_name || !email || !role || !admin_password || !initial_password) {
       return res.status(400).json({ message: 'Missing required fields.' });
     }
 
-    // --- Verify admin password ---
-    const adminId = req.user.user_id;
-    const isValid = await verifyAdminPassword(adminId, admin_password);
-    if (!isValid) {
-      return res.status(401).json({ message: 'Incorrect admin password. Action denied.' });
-    }
+    // Resolve Role & Department
+    role_id = await getRoleId(role);
+    if (!role_id) return res.status(400).json({ message: `Invalid role: ${role}` });
 
-    // --- Check email uniqueness ---
-    const emailCheck = await pool.query(
-      `SELECT 1 FROM users WHERE email = $1`, [email]
-    );
-    if (emailCheck.rowCount > 0) {
-      return res.status(409).json({ message: 'A user with this email already exists.' });
-    }
-
-    // --- Resolve role_id and department_id ---
-    const role_id = await getRoleId(role);
-    if (!role_id) {
-      return res.status(400).json({ message: `Invalid role: ${role}` });
-    }
-
-    let department_id = null;
     if (department && department !== 'All Departments') {
       const deptResult = await pool.query(
         `SELECT department_id FROM departments WHERE LOWER(dept_code) = $1`,
         [department.toLowerCase()]
       );
-      department_id = deptResult.rows[0]?.department_id || null;
+      if (deptResult.rows.length > 0) {
+        department_id = deptResult.rows[0].department_id;
+      }
     }
 
-    // --- Hash the initial password ---
     const password_hash = await bcrypt.hash(initial_password, 10);
 
-    // --- Insert new user ---
+    // 3. ⚙️ AUTO-GENERATE EMPLOYEE NUMBER ⚙️
+    let next_employee_no = 'EMP-1000'; // Default if the database is totally empty
+
+    // Find the most recently created employee number
+    const lastEmp = await pool.query(`
+      SELECT employee_no FROM users 
+      WHERE employee_no LIKE 'EMP-%' 
+      ORDER BY created_at DESC LIMIT 1
+    `);
+
+    if (lastEmp.rows.length > 0) {
+      // Grab the last number (e.g., splits "EMP-1000" and takes the "1000")
+      const lastNumber = parseInt(lastEmp.rows[0].employee_no.split('-')[1]);
+      next_employee_no = `EMP-${lastNumber + 1}`; // Creates "EMP-1001"
+    }
+
+    // 4. Insert User using the generated next_employee_no
     const insertResult = await pool.query(`
       INSERT INTO users (
-        role_id, department_id, first_name, last_name,
+        role_id, department_id, employee_no, first_name, last_name,
         email, contact_no, specialization, password_hash,
         is_active, is_email_verified
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8, TRUE, FALSE)
-      RETURNING user_id, first_name, last_name, email, is_active, created_at
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, TRUE, FALSE)
+      RETURNING user_id, first_name, last_name, email, is_active, created_at, employee_no
     `, [
-      role_id, department_id, first_name, last_name,
+      role_id, department_id, next_employee_no, first_name, last_name,
       email, contact_no || null, specialization || null, password_hash,
     ]);
 
-    // --- Audit log ---
+    // 5. Audit log
     await pool.query(`
       INSERT INTO audit_logs (user_id, action, target_table, target_id, new_values, ip_address)
       VALUES ($1, 'CREATE_USER', 'users', $2, $3, $4)
     `, [
       adminId,
       insertResult.rows[0].user_id,
-      JSON.stringify({ first_name, last_name, email, role }),
+      JSON.stringify({ first_name, last_name, email, role, employee_no: next_employee_no }),
       req.ip,
     ]);
 
     res.status(201).json({
-      message: `Account for ${first_name} ${last_name} created successfully.`,
-      user:    insertResult.rows[0],
+      message: `Account created successfully with ID: ${next_employee_no}`,
+      user: insertResult.rows[0],
     });
+
   } catch (err) {
     console.error('createUser error:', err.message);
     res.status(500).json({ message: 'Failed to create user.' });
@@ -320,7 +324,7 @@ async function updateUser(req, res) {
     const {
       first_name, last_name, email, contact_no,
       role, department, specialization, status,
-      admin_password,
+      admin_password, employee_no,
     } = req.body;
 
     if (!admin_password) {
@@ -352,6 +356,16 @@ async function updateUser(req, res) {
       }
     }
 
+    // --- Check employee_no uniqueness (exclude self) ---
+    if (employee_no) {
+      const empCheck = await pool.query(
+        `SELECT 1 FROM users WHERE employee_no = $1 AND user_id != $2`, [employee_no, id]
+      );
+      if (empCheck.rowCount > 0) {
+        return res.status(409).json({ message: 'This Employee Number is already in use by another account.' });
+      }
+    }
+
     // --- Resolve role_id ---
     let role_id = existing.rows[0].role_id;
     if (role) {
@@ -364,6 +378,7 @@ async function updateUser(req, res) {
 
     // --- Resolve department_id ---
     let department_id = existing.rows[0].department_id;
+    
     if (department && department !== 'All Departments') {
       const deptResult = await pool.query(
         `SELECT department_id FROM departments WHERE LOWER(dept_code) = $1`,
@@ -375,6 +390,7 @@ async function updateUser(req, res) {
     const is_active = status ? (status === 'Active') : existing.rows[0].is_active;
 
     // --- Update ---
+    // --- Update ---
     await pool.query(`
       UPDATE users SET
         first_name    = COALESCE($1, first_name),
@@ -385,14 +401,17 @@ async function updateUser(req, res) {
         department_id = $6,
         specialization = COALESCE($7, specialization),
         is_active     = $8,
+        employee_no   = COALESCE($9, employee_no),
         updated_at    = NOW()
-      WHERE user_id = $9
+      WHERE user_id = $10
     `, [
       first_name || null, last_name || null, email || null,
       contact_no || null, role_id, department_id,
-      specialization || null, is_active, id,
+      specialization || null, is_active, 
+      employee_no || null, 
+      id,
     ]);
-
+    
     // --- Audit log ---
     await pool.query(`
       INSERT INTO audit_logs (user_id, action, target_table, target_id, new_values, ip_address)

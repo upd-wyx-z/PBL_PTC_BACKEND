@@ -15,6 +15,33 @@ const pool = require('../config/db');
 const path = require('path');
 const fs   = require('fs');
 
+// ── HELPER: Security Sanitizer for Audit Logs ────────────────
+function sanitizeData(data) {
+  if (!data) return null;
+  if (typeof data !== 'object') return data;
+  
+  const cleanData = { ...data };
+  
+  // Dynamically hunt down and completely REMOVE any sensitive keys
+  Object.keys(cleanData).forEach(key => {
+    const lowerKey = key.toLowerCase();
+    
+    if (
+      lowerKey.includes('password') || 
+      lowerKey.includes('hash') || 
+      lowerKey.includes('token') || 
+      lowerKey.includes('otp')
+    ) {
+      delete cleanData[key]; // Completely strips it from the JSON
+    }
+  });
+  
+  // If the object is empty after stripping sensitive data, return null
+  if (Object.keys(cleanData).length === 0) return null;
+  
+  return cleanData;
+}
+
 // ── HELPER: Map target_table → friendly module name ──────────
 function getModuleFromTable(targetTable, action) {
   if (!targetTable) {
@@ -40,9 +67,6 @@ function getModuleFromTable(targetTable, action) {
 }
 
 // ── GET /api/system/audit-logs ────────────────────────────────
-// Returns paginated audit logs with search, module filter, sort
-// Query params: search, module, sortBy, sortDir, page, limit,
-//               start_date, end_date
 async function getAuditLogs(req, res) {
   try {
     const {
@@ -144,20 +168,25 @@ async function getAuditLogs(req, res) {
       LIMIT $${idx} OFFSET $${idx + 1}
     `, [...params, parseInt(limit), offset]);
 
-    // Shape the response to match what System_Settings.jsx expects
-    const logs = result.rows.map(row => ({
-      log_id:    row.log_id,
-      user_name: row.user_name,
-      role:      row.role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      module:    getModuleFromTable(row.target_table, row.action),
-      action:    row.action?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      timestamp: row.timestamp,
-      details:   row.new_values
-        ? `New values: ${JSON.stringify(row.new_values)}`
-        : row.old_values
-        ? `Affected: ${JSON.stringify(row.old_values)}`
-        : `Target: ${row.target_table || '—'} #${row.target_id || '—'}`,
-    }));
+    // Shape the response and SANITIZE the details
+    const logs = result.rows.map(row => {
+      const safeNew = sanitizeData(row.new_values);
+      const safeOld = sanitizeData(row.old_values);
+
+      return {
+        log_id:    row.log_id,
+        user_name: row.user_name,
+        role:      row.role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        module:    getModuleFromTable(row.target_table, row.action),
+        action:    row.action?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        timestamp: row.timestamp,
+        details:   safeNew
+          ? `Updated data: ${JSON.stringify(safeNew)}`
+          : safeOld
+          ? `Affected data: ${JSON.stringify(safeOld)}`
+          : `Target: ${row.target_table || '—'} #${row.target_id || '—'}`,
+      };
+    });
 
     res.json({ logs, total, page: parseInt(page), limit: parseInt(limit) });
   } catch (err) {
@@ -167,7 +196,6 @@ async function getAuditLogs(req, res) {
 }
 
 // ── GET /api/system/backup-config ────────────────────────────
-// Returns the current auto-backup configuration from system_settings
 async function getBackupConfig(req, res) {
   try {
     const result = await pool.query(`
@@ -179,7 +207,6 @@ async function getBackupConfig(req, res) {
       )
     `);
 
-    // Build config object with defaults
     const config = {
       enabled:   true,
       frequency: 'daily',
@@ -202,8 +229,6 @@ async function getBackupConfig(req, res) {
 }
 
 // ── PUT /api/system/backup-config ────────────────────────────
-// Saves auto-backup settings to system_settings table
-// Body: { enabled, frequency, time, retention }
 async function saveBackupConfig(req, res) {
   try {
     const user_id = req.user.user_id;
@@ -227,7 +252,6 @@ async function saveBackupConfig(req, res) {
       `, [setting.key, setting.value, setting.desc, user_id]);
     }
 
-    // Write to audit log
     await pool.query(`
       INSERT INTO audit_logs (user_id, action, target_table, new_values, ip_address)
       VALUES ($1, 'UPDATE_BACKUP_CONFIG', 'system_settings', $2, $3)
@@ -241,13 +265,10 @@ async function saveBackupConfig(req, res) {
 }
 
 // ── POST /api/system/backup ───────────────────────────────────
-// Triggers a manual database backup
-// Returns a JSON snapshot of key tables as a downloadable file
 async function manualBackup(req, res) {
   try {
     const user_id = req.user.user_id;
 
-    // Collect key table data for backup
     const tables  = ['users', 'roles', 'departments', 'subjects', 'school_years',
                      'class_schedules', 'grade_sheets', 'grade_entries',
                      'announcements', 'tasks', 'resources', 'system_settings'];
@@ -261,14 +282,19 @@ async function manualBackup(req, res) {
 
     for (const table of tables) {
       try {
-        const result = await pool.query(`SELECT * FROM ${table} LIMIT 10000`);
-        backup.tables[table] = result.rows;
+        // Strip sensitive data from manual JSON backups too!
+        if (table === 'users') {
+             const result = await pool.query(`SELECT user_id, first_name, last_name, email, role_id, department_id, is_active FROM users LIMIT 10000`);
+             backup.tables[table] = result.rows;
+        } else {
+             const result = await pool.query(`SELECT * FROM ${table} LIMIT 10000`);
+             backup.tables[table] = result.rows;
+        }
       } catch {
         backup.tables[table] = [];
       }
     }
 
-    // Write to audit log
     await pool.query(`
       INSERT INTO audit_logs (user_id, action, target_table, ip_address)
       VALUES ($1, 'MANUAL_BACKUP', 'system_settings', $2)

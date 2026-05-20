@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment Variables (CRITICAL FOR SECURITY)
+.env
+.env.local
+.env.development
+.env.production
+
+# System Generated Backups
+PTC_Backup_*.json
+*.sql

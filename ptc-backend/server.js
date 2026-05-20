@@ -84,10 +84,10 @@ app.use('/api/workload', require('./src/routes/workload'));
 app.use('/api/system', require('./src/routes/systemSettings'));
 
 // Grade Encoding routes (Faculty)
-//app.use('/api/grades', require('./src/routes/grades'));
+app.use('/api/grades', require('./src/routes/grades'));
  
 // Grade Approvals routes (Admin: Dean, VPAA, Registrar)
-//app.use('/api/grade-approvals', require('./src/routes/gradeApprovals'));
+app.use('/api/grade-approvals', require('./src/routes/gradeApprovals'));
 
 // ─────────────────────────────────────────────────────────────
 //  404 HANDLER

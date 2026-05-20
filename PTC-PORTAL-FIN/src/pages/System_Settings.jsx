@@ -154,6 +154,7 @@ export default function SystemSettings({ user }) {
             table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
             th, td { border: 1px solid #ddd; padding: 12px 8px; text-align: left; }
             th { background-color: #0e5c2b; color: white; font-weight: bold; text-transform: uppercase; font-size: 10px; letter-spacing: 1px; }
+            th.text-right, td.text-right { text-align: right; }
             tr:nth-child(even) { background-color: #f9f9f9; }
             .timestamp { white-space: nowrap; }
           </style>
@@ -168,11 +169,10 @@ export default function SystemSettings({ user }) {
           <table>
             <thead>
               <tr>
-                <th>Date & Time</th>
-                <th>User & Role</th>
-                <th>Module</th>
-                <th>Action</th>
-                <th>Details</th>
+                <th width="25%">Date & Time</th>
+                <th width="35%">User & Role</th>
+                <th width="20%">Module</th>
+                <th width="20%" class="text-right">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -188,8 +188,7 @@ export default function SystemSettings({ user }) {
           <td class="timestamp">${dateStr}</td>
           <td><strong>${log.user_name}</strong><br><span style="color:#666; font-size:10px;">${log.role}</span></td>
           <td>${log.module}</td>
-          <td><strong>${log.action}</strong></td>
-          <td>${log.details}</td>
+          <td class="text-right"><strong>${log.action}</strong></td>
         </tr>
       `;
     });
@@ -488,20 +487,19 @@ export default function SystemSettings({ user }) {
 
           {/* Audit Table */}
           <div className="overflow-x-auto flex-1">
-            <table className="w-full text-left border-collapse min-w-[1000px]">
+            <table className="w-full text-left border-collapse min-w-[800px]">
               <thead className="bg-white border-b border-gray-100">
                 <tr>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest w-48">Date & Time</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest w-48">User & Role</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest w-40">Module</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest w-48">Action</th>
-                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Details</th>
+                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest w-1/4">Date & Time</th>
+                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest w-1/3">User & Role</th>
+                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest w-1/4">Module</th>
+                  <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {isLoading ? (
                   <tr>
-                    <td colSpan="5" className="py-24 text-center">
+                    <td colSpan="4" className="py-24 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
                         <p className="text-gray-400 font-medium text-sm">Loading audit logs...</p>
@@ -510,13 +508,13 @@ export default function SystemSettings({ user }) {
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan="5" className="py-24 text-center">
+                    <td colSpan="4" className="py-24 text-center">
                       <p className="text-red-500 font-bold">{error}</p>
                     </td>
                   </tr>
                 ) : logs.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="py-24 text-center">
+                    <td colSpan="4" className="py-24 text-center">
                       <History className="mx-auto text-gray-200 mb-4" size={48} />
                       <p className="text-gray-500 font-bold">No audit logs found matching criteria.</p>
                     </td>
@@ -548,11 +546,8 @@ export default function SystemSettings({ user }) {
                           {log.module}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm font-bold text-gray-800">
+                      <td className="px-6 py-4 text-sm font-bold text-gray-800 text-right">
                         {log.action}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 font-medium">
-                        {log.details}
                       </td>
                     </tr>
                   ))

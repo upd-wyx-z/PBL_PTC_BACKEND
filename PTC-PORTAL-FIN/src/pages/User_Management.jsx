@@ -386,9 +386,9 @@ export default function UserManagement({ user }) {
                 <div>
                   <div className="flex justify-between">
                     <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Email Address</label>
-                    <span className="text-[9px] text-gray-400 font-bold uppercase">Max 30</span>
+                    <span className="text-[9px] text-gray-400 font-bold uppercase">Max 40</span>
                   </div>
-                  <input name="email" type="email" required maxLength={30} defaultValue={userModal.data?.email || ''} className="w-full p-3.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium" placeholder="faculty@ptc.edu.ph" />
+                  <input name="email" type="email" required maxLength={40} defaultValue={userModal.data?.email || ''} className="w-full p-3.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-600 outline-none text-sm font-medium" placeholder="faculty@ptc.edu.ph" />
                 </div>
                 <div>
                   <div className="flex justify-between">

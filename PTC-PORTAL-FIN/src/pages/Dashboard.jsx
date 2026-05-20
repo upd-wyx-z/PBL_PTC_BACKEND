@@ -6,9 +6,6 @@ import {
   X, MapPin, Flag, Activity, User, CalendarDays
 } from 'lucide-react';
 
-// ✅ NO local MOCK data here — all data comes from App.jsx via props
-// Props: user, setCurrentView, tasks, eventsList, announcements
-
 export default function Dashboard({ user, setCurrentView, tasks, eventsList, announcements }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [time, setTime] = useState(new Date());
@@ -19,13 +16,10 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
     return () => clearInterval(timer);
   }, []);
 
-  // Local state — Dashboard fetches its own data directly
-  // This fixes the empty calendar on first login problem
   const [localEvents, setLocalEvents]             = useState(eventsList || []);
   const [localTasks, setLocalTasks]               = useState(tasks || []);
   const [localAnnouncements, setLocalAnnouncements] = useState(announcements || []);
 
-  // Self-fetch on mount — does NOT depend on App.jsx props timing
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -44,7 +38,6 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
     fetchData();
   }, []);
 
-  // Sync when props update from App.jsx (after Tasks page sets new data)
   useEffect(() => { if (tasks?.length)         setLocalTasks(tasks); },               [tasks]);
   useEffect(() => { if (eventsList?.length)    setLocalEvents(eventsList); },         [eventsList]);
   useEffect(() => { if (announcements?.length) setLocalAnnouncements(announcements); }, [announcements]);
@@ -147,7 +140,6 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto relative">
 
-      {/* MODAL */}
       {modalContent && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in" onClick={closeModal}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-in zoom-in-95 duration-200 flex flex-col" onClick={e => e.stopPropagation()}>
@@ -175,7 +167,6 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
         document.body
       )}
 
-      {/* HEADER */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">System Dashboard</h1>
@@ -187,7 +178,6 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
 
-        {/* CALENDAR */}
         <div className="xl:col-span-8">
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden flex flex-col h-full min-h-[700px]">
             <div className="bg-[#0e5c2b] p-6 text-white">
@@ -231,7 +221,6 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
                   const d = i + 1;
                   const isToday = new Date().getDate() === d && new Date().getMonth() === currentDate.getMonth() && new Date().getFullYear() === currentDate.getFullYear();
 
-                  // ✅ Match events using start_datetime (same logic as Task_Schedule.jsx)
                   const dayEvents = localEvents.filter(ev => {
                     if (!ev.start_datetime) return false;
                     const evDate = new Date(ev.start_datetime);
@@ -243,8 +232,7 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
                   return (
                     <div
                       key={d}
-                      className="border-r border-b bg-white min-h-[90px] p-2 hover:bg-green-50/30 transition-colors group relative cursor-pointer"
-                      onClick={() => { if (dayEvents.length > 0) setModalContent({ type: 'event', data: dayEvents[0] }); }}
+                      className="border-r border-b bg-white min-h-[90px] p-2 hover:bg-green-50/30 transition-colors group relative"
                     >
                       <div className="flex justify-between items-start mb-2">
                         <span className={`text-sm font-black flex items-center justify-center w-8 h-8 rounded-full ${isToday ? 'bg-yellow-400 text-green-950 shadow-lg scale-110' : 'text-gray-400 group-hover:text-green-800'}`}>{d}</span>
@@ -252,7 +240,10 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
                       </div>
                       <div className="space-y-1 overflow-hidden">
                         {dayEvents.map((ev, idx) => (
-                          <div key={idx} className={`text-[9px] font-bold px-2 py-1 rounded border-l-4 truncate 
+                          <div 
+                            key={idx} 
+                            onClick={() => setModalContent({ type: 'event', data: ev })} 
+                            className={`cursor-pointer hover:scale-[1.02] transition-transform text-[9px] font-bold px-2 py-1 rounded border-l-4 truncate 
                             ${ev.color === 'red' ? 'bg-red-50 text-red-700 border-red-400' : ev.color === 'orange' ? 'bg-orange-50 text-orange-700 border-orange-400' : 'bg-blue-50 text-blue-700 border-blue-400'}`}>
                             {ev.title}
                           </div>
@@ -266,10 +257,7 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
           </div>
         </div>
 
-        {/* SIDE COLUMN */}
         <div className="xl:col-span-4 space-y-6">
-
-          {/* ANNOUNCEMENTS */}
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 flex flex-col h-[350px]">
             <div className="flex justify-between items-center mb-6 border-b border-gray-50 pb-4">
               <h3 className="font-bold text-gray-800 flex items-center uppercase tracking-widest text-xs">
@@ -277,7 +265,6 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
               </h3>
             </div>
             <div className="space-y-4 overflow-y-auto pr-2">
-              {/* ✅ Uses announcements prop from App.jsx */}
               {localAnnouncements.map(ann => (
                 <div
                   key={ann.announcement_id}
@@ -294,7 +281,6 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
             </div>
           </div>
 
-          {/* TASKS PREVIEW */}
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 flex-1">
             <div className="flex justify-between items-center mb-6 border-b border-gray-50 pb-4">
               <h3 className="font-bold text-gray-800 flex items-center uppercase tracking-widest text-xs">
@@ -302,7 +288,6 @@ export default function Dashboard({ user, setCurrentView, tasks, eventsList, ann
               </h3>
             </div>
             <div className="space-y-4">
-              {/* ✅ Uses tasks prop from App.jsx — shows up to 3 pending tasks */}
               {localTasks.filter(t => t.status !== 'completed').slice(0, 3).map(task => (
                 <div
                   key={task.task_id}

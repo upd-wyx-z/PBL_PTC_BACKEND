@@ -15,6 +15,7 @@ export default function RegistrarScheduling({ user }) {
   const [schoolYears,  setSchoolYears]  = useState([]);
   const [subjects,     setSubjects]     = useState([]);
   const [facultyList,  setFacultyList]  = useState([]);
+  const [availableSections, setAvailableSections] = useState([]);
   const [isLoading,    setIsLoading]    = useState(true);
   const [error,        setError]        = useState('');
   const [toast,        setToast]        = useState(null);
@@ -39,16 +40,16 @@ export default function RegistrarScheduling({ user }) {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const [syRes, subjRes, facRes] = await Promise.all([
+        const [syRes, subjRes, facRes, secRes] = await Promise.all([
           fetch(`${API_BASE}/scheduling/school-years`, { credentials: 'include' }),
           fetch(`${API_BASE}/scheduling/subjects`,     { credentials: 'include' }),
           fetch(`${API_BASE}/scheduling/faculty`,      { credentials: 'include' }),
+          fetch(`${API_BASE}/scheduling/sections`,     { credentials: 'include' }),
         ]);
 
         if (syRes.ok) {
           const d = await syRes.json();
           setSchoolYears(d.schoolYears || []);
-          // Default to the current school year
           const current = d.schoolYears.find(sy => sy.is_current) || d.schoolYears[0];
           if (current) setFilterSY(current.sy_id);
         }
@@ -59,6 +60,10 @@ export default function RegistrarScheduling({ user }) {
         if (facRes.ok) {
           const d = await facRes.json();
           setFacultyList(d.faculty || []);
+        }
+        if (secRes.ok) {
+          const d = await secRes.json();
+          setAvailableSections(d.sections || []);
         }
       } catch (err) {
         console.error('Failed to fetch dropdown options:', err);
@@ -327,14 +332,17 @@ export default function RegistrarScheduling({ user }) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Section Name</label>
-                  <input
-                    type="text"
+                  <select
                     required
                     value={modalState.data.section}
                     onChange={(e) => handleFormChange('section', e.target.value)}
-                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0e5c2b] outline-none text-sm font-medium"
-                    placeholder="e.g. BSIT 3A"
-                  />
+                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0e5c2b] outline-none text-sm font-bold text-gray-800 bg-white"
+                  >
+                    <option value="" disabled>-- Select Section --</option>
+                    {availableSections.map(sec => (
+                      <option key={sec} value={sec}>{sec}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Room</label>

@@ -340,6 +340,13 @@ async function acknowledgeWorkload(req, res) {
         updated_at      = NOW()
     `, [facultyId, targetSyId, deanId]);
 
+    await pool.query(`
+      UPDATE class_schedules
+      SET workflow_status = 'Drafting', updated_at = NOW()
+      WHERE faculty_id = $1 AND sy_id = $2
+      AND (workflow_status IS NULL OR workflow_status = 'For Approval')
+    `, [facultyId, targetSyId]);
+
     // Get faculty name for the memo
     const facResult = await pool.query(
       `SELECT first_name, last_name FROM users WHERE user_id = $1`, [facultyId]
@@ -416,6 +423,13 @@ async function requestRevision(req, res) {
         revision_remarks = $4,
         updated_at       = NOW()
     `, [facultyId, targetSyId, deanId, remarks.trim()]);
+
+    await pool.query(`
+      UPDATE class_schedules
+      SET workflow_status = 'For Approval', updated_at = NOW()
+      WHERE faculty_id = $1 AND sy_id = $2
+      AND workflow_status = 'Drafting'
+    `, [facultyId, targetSyId]);
 
     // Get dean info
     const deanResult = await pool.query(

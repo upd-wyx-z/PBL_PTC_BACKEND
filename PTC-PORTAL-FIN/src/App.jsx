@@ -5,6 +5,7 @@ import {
   FileSpreadsheet, ChevronLeft, ChevronRight, Clock, User, Shield,
   Briefcase, CalendarDays
 } from 'lucide-react';
+import { Menu } from 'lucide-react';
 
 import LoginView from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -31,7 +32,9 @@ export const API_BASE = '/api';
 // ============================================================
 export default function App() {
   const [currentUser, setCurrentUser]   = useState(null);
-  const [currentView, setCurrentView]   = useState('dashboard');
+  const [currentView, setCurrentView] = useState(() => {
+    return localStorage.getItem('ptc_currentView') || 'dashboard';
+  });
   const [isRestoring, setIsRestoring]   = useState(true); // checking session on load
 
   // Shared state — now loaded from backend via /api/dashboard
@@ -109,6 +112,7 @@ export default function App() {
       // Always clear state regardless of network result
       setCurrentUser(null);
       setCurrentView('dashboard');
+      localStorage.removeItem('ptc_currentView');
       setTasks([]);
       setEventsList([]);
       setAnnouncements([]);
@@ -144,6 +148,7 @@ export default function App() {
   // Refresh dashboard data whenever user navigates back to dashboard
   const handleSetCurrentView = async (view) => {
     setCurrentView(view);
+    localStorage.setItem('ptc_currentView', view); // <-- Save to browser memory
     if (view === 'dashboard') {
       await loadDashboardData();
     }
@@ -244,47 +249,63 @@ export default function App() {
 //  SIDEBAR
 // ============================================================
 function Sidebar({ role, isAdmin, isSuperAdmin, currentView, setCurrentView }) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   const facultyLinks = [
     { id: 'dashboard',   label: 'Dashboard',            icon: Activity },
-    { id: 'grades',      label: 'Grade Encoding',        icon: FileSpreadsheet },
-    { id: 'my_workload', label: 'My Workload',           icon: Briefcase },
-    { id: 'tasks',       label: 'Tasks & Schedule',      icon: CalendarIcon },
-    { id: 'repository',  label: 'Department Repository', icon: BookOpen },
-    { id: 'profile',     label: 'My Profile',            icon: User },
+    { id: 'grades',      label: 'Grade Encoding',       icon: FileSpreadsheet },
+    { id: 'my_workload', label: 'My Workload',          icon: Briefcase },
+    { id: 'tasks',       label: 'Tasks & Schedule',     icon: CalendarIcon },
+    { id: 'repository',  label: 'Department Repository',icon: BookOpen },
+    { id: 'profile',     label: 'My Profile',           icon: User },
   ];
 
   const adminLinks = [
     { id: 'dashboard',   label: 'Dashboard',            icon: Activity },
-    { id: 'approvals',   label: 'Approvals Queue',       icon: FileCheck },
-    { id: 'scheduling',  label: 'Course Scheduling',     icon: CalendarDays },
-    { id: 'workload',    label: 'Workload Management',   icon: Briefcase },
-    { id: 'tasks',       label: 'Tasks & Schedule',      icon: CalendarIcon },
-    { id: 'repository',  label: 'Department Repository', icon: BookOpen },
-    { id: 'directory',   label: 'Faculty Directory',     icon: Users },
-    { id: 'profile',     label: 'My Profile',            icon: User },
+    { id: 'approvals',   label: 'Approvals Queue',      icon: FileCheck },
+    { id: 'scheduling',  label: 'Course Scheduling',    icon: CalendarDays },
+    { id: 'workload',    label: 'Workload Management',  icon: Briefcase },
+    { id: 'tasks',       label: 'Tasks & Schedule',     icon: CalendarIcon },
+    { id: 'repository',  label: 'Department Repository',icon: BookOpen },
+    { id: 'directory',   label: 'Faculty Directory',    icon: Users },
+    { id: 'profile',     label: 'My Profile',           icon: User },
   ];
 
   const superadminLinks = [
     { id: 'dashboard',   label: 'Dashboard',            icon: Activity },
-    { id: 'usermgmt',    label: 'User Management',       icon: Shield },
-    { id: 'scheduling',  label: 'Course Scheduling',     icon: CalendarDays },
-    { id: 'workload',    label: 'Workload Management',   icon: Briefcase },
-    { id: 'tasks',       label: 'Tasks & Schedule',      icon: CalendarIcon },
-    { id: 'repository',  label: 'Department Repository', icon: BookOpen },
-    { id: 'directory',   label: 'Faculty Directory',     icon: Users },
-    { id: 'profile',     label: 'My Profile',            icon: User },
+    { id: 'usermgmt',    label: 'User Management',      icon: Shield },
+    { id: 'scheduling',  label: 'Course Scheduling',    icon: CalendarDays },
+    { id: 'workload',    label: 'Workload Management',  icon: Briefcase },
+    { id: 'tasks',       label: 'Tasks & Schedule',     icon: CalendarIcon },
+    { id: 'repository',  label: 'Department Repository',icon: BookOpen },
+    { id: 'directory',   label: 'Faculty Directory',    icon: Users },
+    { id: 'profile',     label: 'My Profile',           icon: User },
   ];
 
   const links = isSuperAdmin ? superadminLinks : isAdmin ? adminLinks : facultyLinks;
 
   return (
-    <div className="w-64 bg-green-900 text-white flex flex-col shadow-2xl z-10">
-      <div className="p-6 border-b border-green-800 flex items-center justify-center">
-        <img src="/ptc-logo.png" className="w-8 h-8 mr-3 object-contain" alt="PTC Logo" />
-        <h2 className="text-xl font-bold tracking-tight">PTC Portal</h2>
+    <div className={`bg-green-900 text-white flex flex-col shadow-2xl z-20 transition-all duration-300 ${isCollapsed ? 'w-20' : 'w-64'}`}>
+      
+      {/* Sidebar Header & Toggle */}
+      <div className={`p-5 border-b border-green-800 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+        {!isCollapsed && (
+          <div className="flex items-center">
+            <img src="/ptc-logo.png" className="w-8 h-8 mr-3 object-contain" alt="PTC Logo" />
+            <h2 className="text-xl font-bold tracking-tight whitespace-nowrap">PTC Portal</h2>
+          </div>
+        )}
+        <button 
+          onClick={() => setIsCollapsed(!isCollapsed)} 
+          className="text-green-200 hover:text-white transition-colors p-1 rounded-md hover:bg-green-800"
+          title="Toggle Sidebar"
+        >
+          <Menu size={24} />
+        </button>
       </div>
-      <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
-        <p className="text-[10px] font-bold text-green-400 uppercase tracking-wider mb-4 ml-2">Main Menu</p>
+
+      <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto overflow-x-hidden custom-scrollbar">
+        {!isCollapsed && <p className="text-[10px] font-bold text-green-400 uppercase tracking-wider mb-4 ml-3">Main Menu</p>}
         {links.map((link) => {
           const Icon     = link.icon;
           const isActive = currentView === link.id;
@@ -292,31 +313,34 @@ function Sidebar({ role, isAdmin, isSuperAdmin, currentView, setCurrentView }) {
             <button 
               key={link.id} 
               onClick={() => setCurrentView(link.id)}
-              className={`w-full flex items-center px-3 py-3 text-sm rounded-lg transition-all ${
+              title={isCollapsed ? link.label : ''}
+              className={`w-full flex items-center p-3 text-sm rounded-xl transition-all ${
                 isActive
                   ? 'bg-green-700 text-yellow-400 font-bold shadow-inner'
                   : 'text-green-50 hover:bg-green-800 hover:text-white font-medium'
-              }`}
+              } ${isCollapsed ? 'justify-center' : 'justify-start'}`}
             >
-              <Icon size={18} className="mr-3" />
-              <span className="text-left">{link.label}</span>
+              <Icon size={20} className={isCollapsed ? '' : 'mr-3'} />
+              {!isCollapsed && <span className="text-left whitespace-nowrap">{link.label}</span>}
             </button>
           );
         })}
       </nav>
+      
       {isSuperAdmin && (
-        <div className="px-4 pb-6 border-t border-green-800 pt-4">
-          <p className="text-[10px] font-bold text-green-400 uppercase tracking-wider mb-3 ml-2">System</p>
+        <div className="px-3 pb-6 border-t border-green-800 pt-4">
+          {!isCollapsed && <p className="text-[10px] font-bold text-green-400 uppercase tracking-wider mb-3 ml-3">System</p>}
           <button
             onClick={() => setCurrentView('sysconfig')}
-            className={`w-full flex items-center px-3 py-3 text-sm rounded-lg transition-all ${
+            title={isCollapsed ? 'System Settings' : ''}
+            className={`w-full flex items-center p-3 text-sm rounded-xl transition-all ${
               currentView === 'sysconfig'
                 ? 'bg-green-700 text-yellow-400 font-bold shadow-inner'
                 : 'text-green-50 hover:bg-green-800 hover:text-white font-medium'
-            }`}
+            } ${isCollapsed ? 'justify-center' : 'justify-start'}`}
           >
-            <Settings size={18} className="mr-3" />
-            <span className="text-left">System Settings</span>
+            <Settings size={20} className={isCollapsed ? '' : 'mr-3'} />
+            {!isCollapsed && <span className="text-left whitespace-nowrap">System Settings</span>}
           </button>
         </div>
       )}

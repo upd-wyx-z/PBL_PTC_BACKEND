@@ -15,6 +15,7 @@ const {
   getSchoolYears,
   getSubjects,
   getFacultyList,
+  getStudentSections
 } = require('../controllers/schedulingController');
 
 // GET /api/scheduling/school-years  — dropdown options
@@ -25,6 +26,9 @@ router.get('/subjects', requireAuth, getSubjects);
 
 // GET /api/scheduling/faculty       — dropdown options (faculty list)
 router.get('/faculty', requireAuth, getFacultyList);
+
+// GET /api/scheduling/sections      — dropdown options (unique sections)
+router.get('/sections', requireAuth, getStudentSections);
 
 // GET /api/scheduling               — fetch all schedules (filter by sy_id)
 router.get('/', requireAuth, getSchedules);
