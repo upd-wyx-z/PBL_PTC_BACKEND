@@ -70,8 +70,20 @@ async function loginStepOne(req, res) {
 
     // Send Email
     // --- DEMO BYPASS: DO NOT SEND ACTUAL EMAIL ---
-    // Log the code to the Render terminal so you can see it:
+    // --- DEMO BYPASS: DO NOT SEND ACTUAL EMAIL ---
     console.log(`\n🔔 DEMO MODE: OTP for ${user.email} is: [ ${otpCode} ]\n`);
+    
+    // Make sure you didn't accidentally comment out this response!
+    res.status(200).json({ 
+      message: 'Password verified. Please check your email for the OTP.', 
+      email: user.email 
+    });
+
+  } catch (err) {
+    console.error('loginStepOne error:', err.message);
+    res.status(500).json({ message: 'Server error during login step one.' });
+  }
+} // <--- DOUBLE CHECK THIS BRACKET IS HERE! It closes loginStepOne()
     
     // (Optional) Uncomment the line below to hardcode '123456' for the panel demo to make it super fast:
     // await pool.query('UPDATE users SET otp_code = $1 WHERE user_id = $2', ['123456', user.user_id]);
