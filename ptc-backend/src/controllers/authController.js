@@ -15,11 +15,14 @@ const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 
 // Configure Email Sender (Requires Gmail App Password)
 const transporter = nodemailer.createTransport({
-  service: 'gmail', 
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
   auth: {
-    user: process.env.EMAIL_USER, 
-    pass: process.env.EMAIL_PASS  
-  }
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  },
+  family: 4 // <--- THIS IS THE FIX: Forces IPv4 instead of IPv6
 });
 
 // ─────────────────────────────────────────────────────────────
