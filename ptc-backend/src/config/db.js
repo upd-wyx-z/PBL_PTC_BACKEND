@@ -5,23 +5,20 @@
 // ============================================================
 
 const { Pool } = require('pg');
-require('dotenv').config();
 
 const pool = new Pool({
-  host:     process.env.DB_HOST,
-  port:     parseInt(process.env.DB_PORT),
-  database: process.env.DB_NAME,
-  user:     process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
+  connectionString: process.env.DATABASE_URL,
+  // THIS IS THE MAGIC FIX FOR CLOUD DATABASES:
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
-// Test the connection when the server starts
-pool.connect((err, client, release) => {
+pool.connect((err) => {
   if (err) {
-    console.error('❌ Database connection failed:', err.message);
+    console.error('❌ Database connection failed:', err.message || err);
   } else {
-    console.log('✅ Connected to PTC_DB (PostgreSQL)');
-    release();
+    console.log('✅ Database connected successfully!');
   }
 });
 
