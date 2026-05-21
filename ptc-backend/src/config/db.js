@@ -6,19 +6,22 @@
 
 const { Pool } = require('pg');
 
+console.log("🛠️ DIAGNOSTIC: Checking Environment Variables...");
+console.log("DB URL exists?", !!process.env.DATABASE_URL);
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // THIS IS THE MAGIC FIX FOR CLOUD DATABASES:
   ssl: {
     rejectUnauthorized: false
   }
 });
 
-pool.connect((err) => {
+pool.connect((err, client, release) => {
   if (err) {
-    console.error('❌ Database connection failed:', err.message || err);
+    console.error('❌ RAW DATABASE ERROR:', err); // Forces it to print the full error
   } else {
     console.log('✅ Database connected successfully!');
+    release(); // Safely close the test connection
   }
 });
 
