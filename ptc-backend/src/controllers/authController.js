@@ -69,61 +69,68 @@ async function loginStepOne(req, res) {
     );
 
     // Send Email
-    await transporter.sendMail({
-      from: `"PTC EduSync Security" <${process.env.EMAIL_USER}>`,
-      to: user.email,
-      subject: 'PTC EduSync - Your Login OTP',
-      html: `
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; padding: 40px 20px; margin: 0;">
-          <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+    // --- DEMO BYPASS: DO NOT SEND ACTUAL EMAIL ---
+    // Log the code to the Render terminal so you can see it:
+    console.log(`\n🔔 DEMO MODE: OTP for ${user.email} is: [ ${otpCode} ]\n`);
+    
+    // (Optional) Uncomment the line below to hardcode '123456' for the panel demo to make it super fast:
+    // await pool.query('UPDATE users SET otp_code = $1 WHERE user_id = $2', ['123456', user.user_id]);
+    
+//     await transporter.sendMail({
+//       from: `"PTC EduSync Security" <${process.env.EMAIL_USER}>`,
+//       to: user.email,
+//       subject: 'PTC EduSync - Your Login OTP',
+//       html: `
+//         <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; padding: 40px 20px; margin: 0;">
+//           <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
             
-            <div style="background-color: #15803d; padding: 30px 20px; text-align: center;">
-              <img src="https://www.paterostechnologicalcollege.edu.ph/ASSETS/IMAGES/LOGO/logo-ptc.png" alt="PTC Logo" style="width: 80px; height: auto; margin-bottom: 15px; display: inline-block;">
-              <h1 style="color: #facc15; margin: 0; font-size: 26px; letter-spacing: 1px; font-weight: bold;">PTC EduSync</h1>
-            </div>
+//             <div style="background-color: #15803d; padding: 30px 20px; text-align: center;">
+//               <img src="https://www.paterostechnologicalcollege.edu.ph/ASSETS/IMAGES/LOGO/logo-ptc.png" alt="PTC Logo" style="width: 80px; height: auto; margin-bottom: 15px; display: inline-block;">
+//               <h1 style="color: #facc15; margin: 0; font-size: 26px; letter-spacing: 1px; font-weight: bold;">PTC EduSync</h1>
+//             </div>
             
-            <div style="padding: 40px 30px; text-align: center;">
-              <h2 style="color: #1f2937; font-size: 22px; margin-top: 0; margin-bottom: 16px;">Security Verification</h2>
-              <p style="color: #4b5563; font-size: 16px; line-height: 1.5; margin-bottom: 30px;">
-                You recently requested to log in to your PTC EduSync account. Please use the following 6-digit code to complete your authentication:
-              </p>
+//             <div style="padding: 40px 30px; text-align: center;">
+//               <h2 style="color: #1f2937; font-size: 22px; margin-top: 0; margin-bottom: 16px;">Security Verification</h2>
+//               <p style="color: #4b5563; font-size: 16px; line-height: 1.5; margin-bottom: 30px;">
+//                 You recently requested to log in to your PTC EduSync account. Please use the following 6-digit code to complete your authentication:
+//               </p>
               
-              <div style="background-color: #f9fafb; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
-                <span style="font-size: 40px; font-weight: 800; letter-spacing: 10px; color: #15803d; display: block; margin-left: 10px;">
-                  ${otpCode}
-                </span>
-              </div>
+//               <div style="background-color: #f9fafb; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
+//                 <span style="font-size: 40px; font-weight: 800; letter-spacing: 10px; color: #15803d; display: block; margin-left: 10px;">
+//                   ${otpCode}
+//                 </span>
+//               </div>
               
-              <p style="color: #ef4444; font-size: 14px; font-weight: 600; margin-top: 0; margin-bottom: 10px;">
-                ⚠️ This code will expire in 10 minutes.
-              </p>
-              <p style="color: #6b7280; font-size: 13px; margin: 0;">
-                If you did not attempt to log in, please secure your account and contact MIS immediately.
-              </p>
-            </div>
+//               <p style="color: #ef4444; font-size: 14px; font-weight: 600; margin-top: 0; margin-bottom: 10px;">
+//                 ⚠️ This code will expire in 10 minutes.
+//               </p>
+//               <p style="color: #6b7280; font-size: 13px; margin: 0;">
+//                 If you did not attempt to log in, please secure your account and contact MIS immediately.
+//               </p>
+//             </div>
             
-            <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px; text-align: center;">
-              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
-                © ${new Date().getFullYear()} Pateros Technological College. All rights reserved.<br>
-                This is an automated message. Please do not reply.
-              </p>
-            </div>
+//             <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px; text-align: center;">
+//               <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+//                 © ${new Date().getFullYear()} Pateros Technological College. All rights reserved.<br>
+//                 This is an automated message. Please do not reply.
+//               </p>
+//             </div>
 
-          </div>
-        </div>
-      `
-    });
+//           </div>
+//         </div>
+//       `
+//     });
 
-    res.status(200).json({ 
-      message: 'Password verified. Please check your email for the OTP.', 
-      email: user.email 
-    });
+//     res.status(200).json({ 
+//       message: 'Password verified. Please check your email for the OTP.', 
+//       email: user.email 
+//     });
 
-  } catch (err) {
-    console.error('loginStepOne error:', err.message);
-    res.status(500).json({ message: 'Server error during login step one.' });
-  }
-}
+//   } catch (err) {
+//     console.error('loginStepOne error:', err.message);
+//     res.status(500).json({ message: 'Server error during login step one.' });
+//   }
+// }
 
 // ─────────────────────────────────────────────────────────────
 //  STEP 2: POST /api/auth/verify-otp
